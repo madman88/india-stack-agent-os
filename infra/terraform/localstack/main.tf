@@ -53,6 +53,34 @@ resource "aws_dynamodb_table" "proof_chain" {
   }
 }
 
+resource "aws_dynamodb_table" "business_state" {
+  name         = "agent-os-business-state"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "business_id"
+
+  attribute {
+    name = "business_id"
+    type = "S"
+  }
+}
+
+resource "aws_dynamodb_table" "approvals" {
+  name         = "agent-os-approvals"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "business_id"
+  range_key    = "approval_id"
+
+  attribute {
+    name = "business_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "approval_id"
+    type = "S"
+  }
+}
+
 resource "aws_secretsmanager_secret" "rail_adapter_config" {
   name = "agent-os/rail-adapters/mock"
 }
@@ -80,4 +108,12 @@ output "rail_events_queue_url" {
 
 output "proof_chain_table" {
   value = aws_dynamodb_table.proof_chain.name
+}
+
+output "business_state_table" {
+  value = aws_dynamodb_table.business_state.name
+}
+
+output "approvals_table" {
+  value = aws_dynamodb_table.approvals.name
 }

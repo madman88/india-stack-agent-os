@@ -1,5 +1,6 @@
 import { createWorkingCapitalDecision, answerAgentMessage } from "./services/agent-service.mjs";
 import { captureApproval } from "./services/approval-service.mjs";
+import { repositories } from "./db/repositories.mjs";
 import { businessId, scenario } from "./lib/fixtures.mjs";
 
 export async function routeRequest({ method, pathname, searchParams, body = {} }) {
@@ -8,11 +9,11 @@ export async function routeRequest({ method, pathname, searchParams, body = {} }
   }
 
   if (method === "GET" && pathname === "/health") {
-    return { status: 200, body: { status: "ok", service: "mock-api" } };
+    return { status: 200, body: { status: "ok", service: "mock-api", db: repositories.mode } };
   }
 
   if (method === "GET" && pathname === `/v1/businesses/${businessId}/snapshot`) {
-    return { status: 200, body: scenario };
+    return { status: 200, body: await repositories.getBusinessSnapshot(businessId) };
   }
 
   if (method === "POST" && pathname === "/v1/decisions/working-capital") {
@@ -23,9 +24,13 @@ export async function routeRequest({ method, pathname, searchParams, body = {} }
   }
 
   if (method === "POST" && pathname === "/v1/approvals") {
+    const approval = captureApproval({ ...body, businessId: body.businessId ?? businessId });
+    await repositories.putApproval(approval.businessId, approval);
+    await repositories.appendProofEvents(approval.businessId, approval.proofsToPrepend);
+
     return {
       status: 200,
-      body: captureApproval({ ...body, businessId: body.businessId ?? businessId })
+      body: approval
     };
   }
 
@@ -38,11 +43,14 @@ export async function routeRequest({ method, pathname, searchParams, body = {} }
   }
 
   if (method === "GET" && pathname === "/v1/proof-chain") {
+    const requestedBusinessId = searchParams.get("businessId") ?? businessId;
+    const persistedProofs = await repositories.listProofEvents(requestedBusinessId);
+
     return {
       status: 200,
       body: {
-        businessId: searchParams.get("businessId") ?? businessId,
-        proofs: scenario.proofs
+        businessId: requestedBusinessId,
+        proofs: [...persistedProofs, ...scenario.proofs]
       }
     };
   }

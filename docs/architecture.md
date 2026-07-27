@@ -10,6 +10,7 @@ India Stack Agent OS is contract-first. The frontend talks only to `/v1/*`; loca
 - `services/mock-api/http.mjs` is the route layer that maps HTTP requests to service functions.
 - `services/mock-api/services/` holds business workflows such as working-capital decisions and approvals.
 - `services/mock-api/adapters/` holds mock India Stack rail adapters.
+- `services/mock-api/db/` holds repository implementations for memory and DynamoDB-backed local/prod parity.
 - `services/mock-api/lib/fixtures.mjs` holds shared scenario data for mock API and production demo packaging.
 - `scripts/prepare-sites-build.mjs` creates a self-contained Sites worker artifact for the public demo.
 
@@ -38,6 +39,14 @@ The first closed loop is MSME working capital:
 5. Ask owner approval.
 6. Prepare UPI repayment mandate.
 7. Append proof events for audit.
+
+## Databases
+
+The service uses repository interfaces so local tests can run in memory while Docker Compose can use LocalStack DynamoDB:
+
+- `agent-os-business-state`: current business snapshot keyed by `business_id`.
+- `agent-os-proof-chain`: proof events keyed by `business_id` and `proof_id`.
+- `agent-os-approvals`: owner approval or rejection decisions keyed by `business_id` and `approval_id`.
 
 ## Local/Production Parity
 
