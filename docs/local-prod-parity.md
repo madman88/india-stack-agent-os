@@ -56,6 +56,14 @@ API_BASE_URL=http://localhost:8787 npm run test:events
 
 ## Test Levels
 
+Adapter contract smoke:
+
+```bash
+npm run test:adapters
+```
+
+This pins the normalized AA, GSTN, ONDC, OCEN, UPI, and Finternet-facing payloads that real rail adapters must keep producing when mocks are replaced.
+
 Contract smoke:
 
 ```bash
