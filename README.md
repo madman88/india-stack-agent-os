@@ -19,12 +19,24 @@ npm run dev
 Frontend: http://localhost:5173  
 Mock API: http://localhost:8787
 
-## Contract Smoke Test
+## Tests
 
-Start the mock API, then run:
+Run the full local verification:
+
+```bash
+npm test
+```
+
+Run a contract smoke test against an already running API:
 
 ```bash
 npm run test:contracts
+```
+
+Run an integration test that starts and stops its own mock API:
+
+```bash
+npm run test:integration
 ```
 
 ## Docker Compose
@@ -65,3 +77,9 @@ Production services should implement the same OpenAPI contract as the mock API. 
 - Finternet adapter for tokenized assets, proof chains, and settlement proofs
 
 Frontend code should continue to call `/v1/*`.
+
+## Docs
+
+- [Architecture](docs/architecture.md)
+- [Local and production parity](docs/local-prod-parity.md)
+- [Pilot plan](docs/pilot-plan.md)

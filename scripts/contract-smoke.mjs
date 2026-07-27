@@ -41,6 +41,10 @@ const decision = await request("/v1/decisions/working-capital", {
   body: JSON.stringify({ businessId: "ravi-stores" })
 });
 assert(decision.recommendation.requiredApproval === true, "decision must require approval");
+assert(decision.selectedOffer.lender === "Pragati NBFC", "decision selected offer mismatch");
+assert(decision.evidence.cashflow.rail === "AA", "decision AA evidence missing");
+assert(decision.evidence.demand.rail === "ONDC", "decision ONDC evidence missing");
+assert(decision.evidence.compliance.rail === "GSTN", "decision GSTN evidence missing");
 
 const approval = await request("/v1/approvals", {
   method: "POST",
@@ -58,3 +62,4 @@ const agent = await request("/v1/agent/messages", {
 assert(typeof agent.message === "string" && agent.message.length > 20, "agent response invalid");
 
 console.log("contract smoke passed");
+export const status = "passed";

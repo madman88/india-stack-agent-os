@@ -9,7 +9,9 @@
     "dev:api": "node services/mock-api/server.mjs",
     "build": "tsc -b && vite build && node scripts/prepare-sites-build.mjs",
     "preview": "vite preview --host 0.0.0.0",
-    "test:contracts": "node scripts/contract-smoke.mjs"
+    "test:contracts": "node scripts/contract-smoke.mjs",
+    "test:integration": "node scripts/integration-test.mjs",
+    "test": "npm run test:integration && npm run build"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.2",
