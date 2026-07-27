@@ -138,6 +138,32 @@ async function handleApi(request, url) {
         repaymentCapDays: 45,
         requiredApproval: true
       },
+      selectedOffer: scenario.loanOffers[0],
+      evidence: {
+        cashflow: {
+          rail: "AA",
+          inflow90d: 480000,
+          averageDailyBalance: 62000,
+          volatility: "moderate",
+          consent: {
+            purpose: "working-capital-affordability",
+            expiresInDays: 30,
+            status: "purpose-bound"
+          }
+        },
+        demand: {
+          rail: "ONDC",
+          demandLift: 31,
+          stockoutSkus: scenario.inventory.filter((item) => item.daysLeft <= 2).map((item) => item.sku),
+          window: "weekend"
+        },
+        compliance: {
+          rail: "GSTN",
+          filingStreakMonths: 9,
+          openLiability: false,
+          status: "clean"
+        }
+      },
       loanOffers: scenario.loanOffers
     });
   }

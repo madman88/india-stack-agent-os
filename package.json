@@ -11,7 +11,8 @@
     "preview": "vite preview --host 0.0.0.0",
     "test:contracts": "node scripts/contract-smoke.mjs",
     "test:integration": "node scripts/integration-test.mjs",
-    "test": "npm run test:integration && npm run build"
+    "test:sites-worker": "node scripts/sites-worker-smoke.mjs",
+    "test": "npm run test:integration && npm run build && npm run test:sites-worker"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.2",
