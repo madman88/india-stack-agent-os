@@ -99,13 +99,13 @@ resource "aws_secretsmanager_secret" "rail_adapter_config" {
 resource "aws_secretsmanager_secret_version" "rail_adapter_config" {
   secret_id = aws_secretsmanager_secret.rail_adapter_config.id
   secret_string = jsonencode({
-    aa_endpoint         = "mock://aa"
-    ondc_endpoint       = "mock://ondc"
-    gstn_endpoint       = "mock://gstn"
-    ocen_endpoint       = "mock://ocen"
-    upi_endpoint        = "mock://upi"
-    finternet_endpoint  = "mock://finternet"
-    contract_version    = "0.1.0"
+    aa_endpoint        = "mock://aa"
+    ondc_endpoint      = "mock://ondc"
+    gstn_endpoint      = "mock://gstn"
+    ocen_endpoint      = "mock://ocen"
+    upi_endpoint       = "mock://upi"
+    finternet_endpoint = "mock://finternet"
+    contract_version   = "0.1.0"
   })
 }
 

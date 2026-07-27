@@ -5,8 +5,11 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  test:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -18,8 +21,120 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
       - name: Install
         run: npm ci
 
-      - name: Test
+      - name: App, contract, and build checks
         run: npm test
+
+      - name: Terraform format
+        run: terraform -chdir=infra/terraform/localstack fmt -check
+
+      - name: Terraform init
+        run: terraform -chdir=infra/terraform/localstack init -input=false
+
+      - name: Terraform validate
+        run: terraform -chdir=infra/terraform/localstack validate
+
+      - name: Docker Compose config
+        run: docker compose config --quiet
+
+      - name: Start LocalStack
+        run: docker compose up -d localstack
+
+      - name: Wait for LocalStack
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://localhost:4566/_localstack/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs localstack
+          exit 1
+
+      - name: Apply LocalStack Terraform
+        run: terraform -chdir=infra/terraform/localstack apply -auto-approve -input=false
+
+      - name: Seed DynamoDB
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_REGION: ap-south-1
+          AWS_ENDPOINT_URL: http://localhost:4566
+        run: npm run db:seed
+
+      - name: Start mock rails
+        run: |
+          PORT=8790 npm run dev:rails > /tmp/mock-rails.log 2>&1 &
+          echo $! > /tmp/mock-rails.pid
+
+      - name: Wait for mock rails
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8790/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/mock-rails.log || true
+          exit 1
+
+      - name: Start mock API
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_REGION: ap-south-1
+          AWS_ENDPOINT_URL: http://localhost:4566
+          DB_DRIVER: dynamodb
+          PROOF_CHAIN_TABLE: agent-os-proof-chain
+          BUSINESS_STATE_TABLE: agent-os-business-state
+          APPROVALS_TABLE: agent-os-approvals
+          EVENT_LEDGER_TABLE: agent-os-event-ledger
+          RAIL_EVENTS_QUEUE_URL: http://sqs.ap-south-1.localhost.localstack.cloud:4566/000000000000/agent-os-rail-events
+          MOCK_RAILS_BASE_URL: http://localhost:8790
+        run: |
+          PORT=8787 npm run dev:api > /tmp/mock-api.log 2>&1 &
+          echo $! > /tmp/mock-api.pid
+
+      - name: Wait for API
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8787/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/mock-rails.log || true
+          cat /tmp/mock-api.log || true
+          exit 1
+
+      - name: DynamoDB smoke
+        env:
+          API_BASE_URL: http://localhost:8787
+        run: API_BASE_URL=http://localhost:8787 npm run test:db
+
+      - name: Event bus smoke
+        env:
+          API_BASE_URL: http://localhost:8787
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_REGION: ap-south-1
+          AWS_ENDPOINT_URL: http://localhost:4566
+          DB_DRIVER: dynamodb
+          EVENT_LEDGER_TABLE: agent-os-event-ledger
+          RAIL_EVENTS_QUEUE_URL: http://sqs.ap-south-1.localhost.localstack.cloud:4566/000000000000/agent-os-rail-events
+          MOCK_RAILS_BASE_URL: http://localhost:8790
+        run: API_BASE_URL=http://localhost:8787 npm run test:events
+
+      - name: Logs on failure
+        if: failure()
+        run: |
+          docker compose logs localstack || true
+          cat /tmp/mock-rails.log || true
+          cat /tmp/mock-api.log || true

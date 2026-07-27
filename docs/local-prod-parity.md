@@ -97,6 +97,8 @@ npm test
 
 Runs integration checks and the production build.
 
+GitHub Actions CI runs the same fast app checks plus Terraform validation, Docker Compose config validation, LocalStack Terraform apply, DynamoDB seeding, DB smoke, and SQS event smoke on every push to `main` and every pull request.
+
 The test harness uses in-memory repositories and in-process rail fixtures by default so it does not require Docker or LocalStack. Docker Compose sets `DB_DRIVER=dynamodb` to exercise LocalStack-backed persistence.
 Docker Compose also sets `RAIL_EVENTS_QUEUE_URL`, which enables SQS publishing and the worker service.
 Docker Compose sets `MOCK_RAILS_BASE_URL=http://mock-rails:8790`, which routes adapter calls over HTTP.
