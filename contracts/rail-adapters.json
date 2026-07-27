@@ -1,0 +1,83 @@
+{
+  "version": "0.1.0",
+  "modes": ["fixture", "mock-http", "sandbox", "prod"],
+  "defaults": {
+    "timeoutMs": 1500,
+    "retries": 1,
+    "errorShape": ["rail", "operation", "retryable", "status", "message", "correlationId"]
+  },
+  "rails": {
+    "AA": {
+      "operations": {
+        "readCashflowAttestation": {
+          "method": "GET",
+          "path": "/aa/cashflow",
+          "authMode": "oauth2-client-credentials",
+          "requiresConsentRef": true,
+          "irreversible": false,
+          "normalizedShape": ["rail", "inflow90d", "averageDailyBalance", "volatility", "consent"]
+        }
+      }
+    },
+    "GSTN": {
+      "operations": {
+        "readComplianceAttestation": {
+          "method": "GET",
+          "path": "/gstn/compliance",
+          "authMode": "api-key",
+          "requiresConsentRef": true,
+          "irreversible": false,
+          "normalizedShape": ["rail", "filingStreakMonths", "openLiability", "status"]
+        }
+      }
+    },
+    "ONDC": {
+      "operations": {
+        "readDemandSignals": {
+          "method": "GET",
+          "path": "/ondc/demand",
+          "authMode": "signed-request",
+          "requiresConsentRef": false,
+          "irreversible": false,
+          "normalizedShape": ["rail", "demandLift", "stockoutSkus", "window"]
+        }
+      }
+    },
+    "OCEN": {
+      "operations": {
+        "discoverCreditOffers": {
+          "method": "GET",
+          "path": "/ocen/offers",
+          "authMode": "partner-token",
+          "requiresConsentRef": true,
+          "irreversible": false,
+          "normalizedShape": ["offers"]
+        }
+      }
+    },
+    "UPI": {
+      "operations": {
+        "prepareRepaymentMandate": {
+          "method": "POST",
+          "path": "/upi/mandates",
+          "authMode": "psp-or-bank-sandbox",
+          "requiresApprovalRef": true,
+          "irreversible": true,
+          "normalizedShape": ["rail", "type", "amount", "repaymentCapDays", "status"]
+        }
+      }
+    },
+    "Finternet": {
+      "operations": {
+        "writeProofEvent": {
+          "method": "POST",
+          "path": "/finternet/proofs",
+          "authMode": "partner-token",
+          "requiresApprovalRef": true,
+          "irreversible": true,
+          "normalizedShape": ["id", "time", "label", "rail", "hash", "status", "detail"]
+        }
+      }
+    }
+  }
+}

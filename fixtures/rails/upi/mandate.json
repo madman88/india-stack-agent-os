@@ -1,0 +1,9 @@
+{
+  "mandate": {
+    "rail": "UPI",
+    "mandateType": "AutoPay",
+    "amount": 72000,
+    "repaymentCapDays": 45,
+    "state": "prepared"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "gstin": "29ABCDE1234F1Z5",
+  "filings": {
+    "cleanStreakMonths": 9,
+    "hasOpenLiability": false
+  },
+  "riskStatus": "clean"
+}

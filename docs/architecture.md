@@ -6,6 +6,7 @@ India Stack Agent OS is contract-first. The frontend talks only to `/v1/*`; loca
 
 - `src/` is the owner and partner console.
 - `contracts/agent-os.openapi.yaml` is the API source of truth.
+- `contracts/rail-adapters.json` is the rail provider mode, operation, and normalized payload contract.
 - `services/mock-rails/server.mjs` exposes HTTP-compatible mock rail endpoints for local service-to-service testing.
 - `services/mock-api/server.mjs` is the local HTTP server.
 - `services/mock-api/http.mjs` is the route layer that maps HTTP requests to service functions.
@@ -28,7 +29,7 @@ Each regulated rail is hidden behind an adapter:
 - DigiLocker: identity and verified documents.
 - Finternet: proof chain, verified assets, obligations, and settlement proofs.
 
-Adapters call `MOCK_RAILS_BASE_URL` when it is configured and fall back to deterministic in-process fixtures when it is not. Production integration should replace adapter internals or endpoint configuration without changing service outputs or `/v1` response shapes.
+Adapters support in-process, fixture, mock HTTP, sandbox, and production modes. `RAIL_ADAPTER_MODE=fixture` replays recorded provider fixtures through normalizers. `MOCK_RAILS_BASE_URL` enables local HTTP service-to-service rail calls. Production integration should replace adapter internals or endpoint configuration without changing service outputs or `/v1` response shapes.
 
 ## First Workflow
 

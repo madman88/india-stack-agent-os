@@ -1,9 +1,15 @@
 import { scenario } from "../lib/fixtures.mjs";
-import { fetchRailJson, railBaseUrl } from "../clients/rail-client.mjs";
+import { normalizeCreditOffers } from "./normalizers/ocen.mjs";
+import { readRailFixture } from "../clients/rail-fixtures.mjs";
+import { fetchRailJson, railAdapterMode, usesRailHttp } from "../clients/rail-client.mjs";
 
 export async function discoverCreditOffers() {
-  if (railBaseUrl()) {
-    const response = await fetchRailJson("/ocen/offers", { rail: "OCEN" });
+  if (railAdapterMode() === "fixture") {
+    return normalizeCreditOffers(await readRailFixture("OCEN", "discoverCreditOffers"));
+  }
+
+  if (usesRailHttp()) {
+    const response = await fetchRailJson("/ocen/offers", { rail: "OCEN", operation: "discoverCreditOffers" });
     return response.offers;
   }
 

@@ -1,4 +1,6 @@
-import { fetchRailJson, railBaseUrl } from "../clients/rail-client.mjs";
+import { normalizeComplianceAttestation } from "./normalizers/gstn.mjs";
+import { readRailFixture } from "../clients/rail-fixtures.mjs";
+import { fetchRailJson, railAdapterMode, usesRailHttp } from "../clients/rail-client.mjs";
 
 const fallbackComplianceAttestation = {
   rail: "GSTN",
@@ -8,8 +10,12 @@ const fallbackComplianceAttestation = {
 };
 
 export async function readComplianceAttestation() {
-  if (railBaseUrl()) {
-    return fetchRailJson("/gstn/compliance", { rail: "GSTN" });
+  if (railAdapterMode() === "fixture") {
+    return normalizeComplianceAttestation(await readRailFixture("GSTN", "readComplianceAttestation"));
+  }
+
+  if (usesRailHttp()) {
+    return fetchRailJson("/gstn/compliance", { rail: "GSTN", operation: "readComplianceAttestation" });
   }
 
   return fallbackComplianceAttestation;

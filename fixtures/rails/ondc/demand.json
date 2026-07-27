@@ -1,0 +1,8 @@
+{
+  "network": "ONDC",
+  "demandLiftPercent": 31,
+  "stockout": {
+    "window": "weekend",
+    "skus": ["AASHIRVAAD-5KG", "FORTUNE-OIL-1L"]
+  }
+}

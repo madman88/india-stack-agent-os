@@ -1,0 +1,11 @@
+{
+  "proof": {
+    "id": "pf-fixture",
+    "time": "09:20",
+    "label": "Adapter contract proof",
+    "rail": "Finternet",
+    "hash": "abc123ef",
+    "status": "verified",
+    "detail": "Proof event emitted through normalized Finternet adapter"
+  }
+}

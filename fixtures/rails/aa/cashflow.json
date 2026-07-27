@@ -1,0 +1,12 @@
+{
+  "accountAggregator": {
+    "consentId": "consent-ravi-aa-001",
+    "purpose": "working-capital-affordability",
+    "expiresInDays": 30
+  },
+  "summary": {
+    "inflow90d": 480000,
+    "averageDailyBalance": 62000,
+    "volatilityBand": "moderate"
+  }
+}

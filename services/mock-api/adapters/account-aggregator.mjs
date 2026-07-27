@@ -1,4 +1,6 @@
-import { fetchRailJson, railBaseUrl } from "../clients/rail-client.mjs";
+import { normalizeCashflowAttestation } from "./normalizers/aa.mjs";
+import { readRailFixture } from "../clients/rail-fixtures.mjs";
+import { fetchRailJson, railAdapterMode, usesRailHttp } from "../clients/rail-client.mjs";
 
 const fallbackCashflowAttestation = {
   rail: "AA",
@@ -13,8 +15,12 @@ const fallbackCashflowAttestation = {
 };
 
 export async function readCashflowAttestation() {
-  if (railBaseUrl()) {
-    return fetchRailJson("/aa/cashflow", { rail: "AA" });
+  if (railAdapterMode() === "fixture") {
+    return normalizeCashflowAttestation(await readRailFixture("AA", "readCashflowAttestation"));
+  }
+
+  if (usesRailHttp()) {
+    return fetchRailJson("/aa/cashflow", { rail: "AA", operation: "readCashflowAttestation" });
   }
 
   return fallbackCashflowAttestation;

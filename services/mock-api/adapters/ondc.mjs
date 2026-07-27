@@ -1,5 +1,7 @@
 import { scenario } from "../lib/fixtures.mjs";
-import { fetchRailJson, railBaseUrl } from "../clients/rail-client.mjs";
+import { normalizeDemandSignals } from "./normalizers/ondc.mjs";
+import { readRailFixture } from "../clients/rail-fixtures.mjs";
+import { fetchRailJson, railAdapterMode, usesRailHttp } from "../clients/rail-client.mjs";
 
 function fallbackDemandSignals() {
   return {
@@ -11,8 +13,12 @@ function fallbackDemandSignals() {
 }
 
 export async function readDemandSignals() {
-  if (railBaseUrl()) {
-    return fetchRailJson("/ondc/demand", { rail: "ONDC" });
+  if (railAdapterMode() === "fixture") {
+    return normalizeDemandSignals(await readRailFixture("ONDC", "readDemandSignals"));
+  }
+
+  if (usesRailHttp()) {
+    return fetchRailJson("/ondc/demand", { rail: "ONDC", operation: "readDemandSignals" });
   }
 
   return fallbackDemandSignals();

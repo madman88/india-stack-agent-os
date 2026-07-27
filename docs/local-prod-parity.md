@@ -65,6 +65,14 @@ npm run test:adapters
 
 This pins the normalized AA, GSTN, ONDC, OCEN, UPI, and Finternet-facing payloads that real rail adapters must keep producing when mocks are replaced.
 
+Recorded fixture contract smoke:
+
+```bash
+npm run test:fixtures
+```
+
+This validates `contracts/rail-adapters.json` and the recorded provider fixtures under `fixtures/rails/*`.
+
 Contract smoke:
 
 ```bash
