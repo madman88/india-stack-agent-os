@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 const serverPath = join("dist", "server", "index.js");
@@ -9,9 +9,48 @@ mkdirSync(dirname(hostingPath), { recursive: true });
 
 writeFileSync(hostingPath, readFileSync(join(".openai", "hosting.json")));
 
+function contentType(path) {
+  if (path.endsWith(".html")) return "text/html; charset=utf-8";
+  if (path.endsWith(".css")) return "text/css; charset=utf-8";
+  if (path.endsWith(".js")) return "application/javascript; charset=utf-8";
+  if (path.endsWith(".json")) return "application/json; charset=utf-8";
+  if (path.endsWith(".svg")) return "image/svg+xml";
+  if (path.endsWith(".png")) return "image/png";
+  if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
+  if (path.endsWith(".webp")) return "image/webp";
+  return "application/octet-stream";
+}
+
+function collectAssets(dir, prefix = "") {
+  return readdirSync(dir).flatMap((entry) => {
+    if (entry === "server" || entry === ".openai") return [];
+
+    const absolute = join(dir, entry);
+    const relative = `${prefix}/${entry}`;
+
+    if (statSync(absolute).isDirectory()) {
+      return collectAssets(absolute, relative);
+    }
+
+    return [
+      {
+        path: relative,
+        content: readFileSync(absolute, "utf8"),
+        contentType: contentType(relative)
+      }
+    ];
+  });
+}
+
+const indexHtml = readFileSync(join("dist", "index.html"), "utf8");
+const embeddedAssets = collectAssets("dist");
+
 writeFileSync(
   serverPath,
-  String.raw`
+  `
+const embeddedIndexHtml = ${JSON.stringify(indexHtml)};
+const embeddedAssets = ${JSON.stringify(embeddedAssets)};
+
 const businessId = "ravi-stores";
 
 const scenario = {
@@ -244,30 +283,41 @@ async function handleApi(request, url) {
   return null;
 }
 
-async function serveAsset(request, env) {
-  if (!env?.ASSETS?.fetch) {
-    return new Response("India Stack Agent OS deployment is missing an asset binding.", { status: 500 });
+function serveAsset(request, url) {
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return new Response("Method not allowed", { status: 405 });
   }
 
-  const assetResponse = await env.ASSETS.fetch(request);
-  if (assetResponse.status !== 404) {
-    return assetResponse;
+  if (url.pathname === "/" || url.pathname === "/index.html" || !url.pathname.includes(".")) {
+    return new Response(embeddedIndexHtml, {
+      status: 200,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store"
+      }
+    });
   }
 
-  if (request.method === "GET") {
-    const fallbackUrl = new URL("/index.html", request.url);
-    return env.ASSETS.fetch(new Request(fallbackUrl, request));
+  const asset = embeddedAssets.find((item) => item.path === url.pathname);
+  if (!asset) {
+    return new Response("Not found", { status: 404 });
   }
 
-  return assetResponse;
+  return new Response(asset.content, {
+    status: 200,
+    headers: {
+      "content-type": asset.contentType,
+      "cache-control": "public, max-age=31536000, immutable"
+    }
+  });
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request) {
     const url = new URL(request.url);
     const apiResponse = await handleApi(request, url);
     if (apiResponse) return apiResponse;
-    return serveAsset(request, env);
+    return serveAsset(request, url);
   }
 };
 `.trimStart()
