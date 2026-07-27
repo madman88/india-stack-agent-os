@@ -1,0 +1,310 @@
+openapi: 3.1.0
+info:
+  title: India Stack Agent OS API
+  version: 0.1.0
+  description: Contract-first API for local mocks and future production rail adapters.
+servers:
+  - url: http://localhost:8787
+    description: Local mock API
+paths:
+  /health:
+    get:
+      summary: Service health
+      responses:
+        "200":
+          description: Service is available
+  /v1/businesses/{businessId}/snapshot:
+    get:
+      summary: Business operating snapshot
+      parameters:
+        - name: businessId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Business state used by the agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessSnapshot"
+  /v1/decisions/working-capital:
+    post:
+      summary: Generate a working-capital recommendation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [businessId]
+              properties:
+                businessId:
+                  type: string
+      responses:
+        "200":
+          description: Recommendation and comparable credit offers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkingCapitalDecision"
+  /v1/approvals:
+    post:
+      summary: Capture owner approval or rejection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [businessId, action]
+              properties:
+                businessId:
+                  type: string
+                action:
+                  type: string
+                  enum: [approve, reject]
+      responses:
+        "200":
+          description: Approval result and proof events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalResult"
+  /v1/agent/messages:
+    post:
+      summary: Ask the agent about the current recommendation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [businessId, message]
+              properties:
+                businessId:
+                  type: string
+                message:
+                  type: string
+                proofCount:
+                  type: integer
+                verifiedProofCount:
+                  type: integer
+      responses:
+        "200":
+          description: Agent response
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    type: string
+                  meta:
+                    type: string
+  /v1/proof-chain:
+    get:
+      summary: Proof chain events
+      parameters:
+        - name: businessId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Proof events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [businessId, proofs]
+                properties:
+                  businessId:
+                    type: string
+                  proofs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ProofEvent"
+components:
+  schemas:
+    Rail:
+      type: string
+      enum: [AA, ONDC, GSTN, OCEN, UPI, DigiLocker, Finternet, BBPS]
+    ProofEvent:
+      type: object
+      required: [id, time, label, rail, hash, status, detail]
+      properties:
+        id:
+          type: string
+        time:
+          type: string
+        label:
+          type: string
+        rail:
+          $ref: "#/components/schemas/Rail"
+        hash:
+          type: string
+        status:
+          type: string
+          enum: [verified, pending, simulated]
+        detail:
+          type: string
+    BusinessSnapshot:
+      type: object
+      required:
+        - business
+        - inventory
+        - obligations
+        - loanOffers
+        - proofs
+        - messages
+        - railSummary
+        - verifiedAssets
+      properties:
+        business:
+          type: object
+          required: [id, name, city]
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            city:
+              type: string
+        inventory:
+          type: array
+          items:
+            type: object
+            required: [sku, name, stock, daysLeft, demandLift, margin]
+            properties:
+              sku:
+                type: string
+              name:
+                type: string
+              stock:
+                type: integer
+              daysLeft:
+                type: integer
+              demandLift:
+                type: integer
+              margin:
+                type: integer
+        obligations:
+          type: array
+          items:
+            type: object
+            required: [label, due, amount, rail]
+            properties:
+              label:
+                type: string
+              due:
+                type: string
+              amount:
+                type: string
+              rail:
+                $ref: "#/components/schemas/Rail"
+        loanOffers:
+          type: array
+          items:
+            type: object
+            required: [lender, apr, tenure, amount, score, fee]
+            properties:
+              lender:
+                type: string
+              apr:
+                type: string
+              tenure:
+                type: string
+              amount:
+                type: string
+              score:
+                type: integer
+              fee:
+                type: string
+        proofs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProofEvent"
+        messages:
+          type: array
+          items:
+            type: object
+            required: [id, from, text]
+            properties:
+              id:
+                type: integer
+              from:
+                type: string
+                enum: [agent, owner]
+              text:
+                type: string
+              meta:
+                type: string
+        railSummary:
+          type: array
+          items:
+            type: object
+            required: [rail, label, value]
+            properties:
+              rail:
+                $ref: "#/components/schemas/Rail"
+              label:
+                type: string
+              value:
+                type: string
+        verifiedAssets:
+          type: array
+          items:
+            type: object
+            required: [label, holder, rail, state]
+            properties:
+              label:
+                type: string
+              holder:
+                type: string
+              rail:
+                $ref: "#/components/schemas/Rail"
+              state:
+                type: string
+    WorkingCapitalDecision:
+      type: object
+      required: [businessId, recommendation, loanOffers]
+      properties:
+        businessId:
+          type: string
+        recommendation:
+          type: object
+          required: [amount, reason, repaymentCapDays, requiredApproval]
+          properties:
+            amount:
+              type: integer
+            reason:
+              type: string
+            repaymentCapDays:
+              type: integer
+            requiredApproval:
+              type: boolean
+        loanOffers:
+          type: array
+          items:
+            type: object
+    ApprovalResult:
+      type: object
+      required: [businessId, actionState, proofsToPrepend, messagesToAppend]
+      properties:
+        businessId:
+          type: string
+        actionState:
+          type: string
+          enum: [approved, rejected]
+        proofsToPrepend:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProofEvent"
+        messagesToAppend:
+          type: array
+          items:
+            type: object

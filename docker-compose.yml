@@ -1,0 +1,40 @@
+services:
+  web:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev:web"
+    environment:
+      MOCK_API_TARGET: http://mock-api:8787
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+    depends_on:
+      - mock-api
+
+  mock-api:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev:api"
+    environment:
+      PORT: "8787"
+      AWS_ENDPOINT_URL: http://localstack:4566
+    ports:
+      - "8787:8787"
+    volumes:
+      - .:/app
+    depends_on:
+      - localstack
+
+  localstack:
+    image: localstack/localstack:3.8
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3,sqs,dynamodb,secretsmanager
+      DEBUG: "0"
+    volumes:
+      - localstack-data:/var/lib/localstack
+
+volumes:
+  localstack-data:

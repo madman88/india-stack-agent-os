@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.DS_Store
+.env
+.env.*
+*.log
+tsconfig.tsbuildinfo
+.terraform/
+terraform.tfstate
+terraform.tfstate.*
