@@ -6,6 +6,7 @@ India Stack Agent OS is contract-first. The frontend talks only to `/v1/*`; loca
 
 - `src/` is the owner and partner console.
 - `contracts/agent-os.openapi.yaml` is the API source of truth.
+- `services/mock-rails/server.mjs` exposes HTTP-compatible mock rail endpoints for local service-to-service testing.
 - `services/mock-api/server.mjs` is the local HTTP server.
 - `services/mock-api/http.mjs` is the route layer that maps HTTP requests to service functions.
 - `services/mock-api/services/` holds business workflows such as working-capital decisions and approvals.
@@ -27,7 +28,7 @@ Each regulated rail is hidden behind an adapter:
 - DigiLocker: identity and verified documents.
 - Finternet: proof chain, verified assets, obligations, and settlement proofs.
 
-Production integration should replace adapter internals without changing service outputs or `/v1` response shapes.
+Adapters call `MOCK_RAILS_BASE_URL` when it is configured and fall back to deterministic in-process fixtures when it is not. Production integration should replace adapter internals or endpoint configuration without changing service outputs or `/v1` response shapes.
 
 ## First Workflow
 
@@ -62,6 +63,6 @@ The worker consumes SQS messages, writes event-derived proof events, and records
 
 ## Local/Production Parity
 
-Local runs the same frontend and API contract as production. LocalStack is used for AWS-shaped dependencies, and mock adapters stand in for regulated rails until real credentials or partner sandboxes exist.
+Local runs the same frontend and API contract as production. LocalStack is used for AWS-shaped dependencies, and `mock-rails` stands in for regulated rail HTTP services until real credentials or partner sandboxes exist.
 
 The invariant: callers do not know whether they are talking to a mock adapter or real rail adapter.

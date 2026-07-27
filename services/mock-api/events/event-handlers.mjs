@@ -1,3 +1,4 @@
+import { writeProofEvent } from "../adapters/finternet.mjs";
 import { makeProof } from "../lib/proofs.mjs";
 
 export async function handleRailEvent(event, repositories) {
@@ -5,7 +6,7 @@ export async function handleRailEvent(event, repositories) {
     return { status: "duplicate", eventId: event.eventId };
   }
 
-  const proofs = proofsForEvent(event);
+  const proofs = await proofsForEvent(event);
   if (proofs.length > 0) {
     await repositories.appendProofEvents(event.businessId, proofs);
   }
@@ -19,10 +20,14 @@ export async function handleRailEvent(event, repositories) {
   };
 }
 
-function proofsForEvent(event) {
+async function proofsForEvent(event) {
   if (event.type === "approval.captured") {
     return [
-      makeProof("Approval event processed", "Finternet", `Event bus processed ${event.payload.actionState} owner decision`, "verified")
+      await writeProofEvent({
+        label: "Approval event processed",
+        detail: `Event bus processed ${event.payload.actionState} owner decision`,
+        status: "verified"
+      })
     ];
   }
 

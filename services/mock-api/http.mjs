@@ -20,12 +20,12 @@ export async function routeRequest({ method, pathname, searchParams, body = {} }
   if (method === "POST" && pathname === "/v1/decisions/working-capital") {
     return {
       status: 200,
-      body: createWorkingCapitalDecision(body.businessId ?? businessId)
+      body: await createWorkingCapitalDecision(body.businessId ?? businessId)
     };
   }
 
   if (method === "POST" && pathname === "/v1/approvals") {
-    const approval = captureApproval({ ...body, businessId: body.businessId ?? businessId });
+    const approval = await captureApproval({ ...body, businessId: body.businessId ?? businessId });
     await repositories.putApproval(approval.businessId, approval);
     await repositories.appendProofEvents(approval.businessId, approval.proofsToPrepend);
     await publishApprovalEvents(approval, body.idempotencyKey);

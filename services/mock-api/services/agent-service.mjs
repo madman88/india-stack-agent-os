@@ -3,11 +3,13 @@ import { readComplianceAttestation } from "../adapters/gstn.mjs";
 import { discoverCreditOffers } from "../adapters/ocen.mjs";
 import { readDemandSignals } from "../adapters/ondc.mjs";
 
-export function createWorkingCapitalDecision(businessId) {
-  const cashflow = readCashflowAttestation();
-  const demand = readDemandSignals();
-  const compliance = readComplianceAttestation();
-  const loanOffers = discoverCreditOffers();
+export async function createWorkingCapitalDecision(businessId) {
+  const [cashflow, demand, compliance, loanOffers] = await Promise.all([
+    readCashflowAttestation(),
+    readDemandSignals(),
+    readComplianceAttestation(),
+    discoverCreditOffers()
+  ]);
   const selectedOffer = loanOffers[0];
 
   return {

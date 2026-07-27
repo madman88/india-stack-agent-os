@@ -8,6 +8,7 @@
     "dev:web": "vite --host 0.0.0.0",
     "dev:api": "node services/mock-api/server.mjs",
     "dev:worker": "node services/mock-api/worker.mjs",
+    "dev:rails": "node services/mock-rails/server.mjs",
     "db:seed": "DB_DRIVER=dynamodb node scripts/seed-localstack.mjs",
     "build": "tsc -b && vite build && node scripts/prepare-sites-build.mjs",
     "preview": "vite preview --host 0.0.0.0",
@@ -16,8 +17,9 @@
     "test:db": "node scripts/db-smoke.mjs",
     "test:events": "node scripts/event-smoke.mjs",
     "test:integration": "node scripts/integration-test.mjs",
+    "test:rails-http": "API_BASE_URL=http://localhost:9791 node scripts/rail-http-smoke.mjs",
     "test:sites-worker": "node scripts/sites-worker-smoke.mjs",
-    "test": "npm run test:adapters && npm run test:integration && npm run build && npm run test:sites-worker"
+    "test": "npm run test:adapters && npm run test:integration && npm run test:rails-http && npm run build && npm run test:sites-worker"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.953.0",

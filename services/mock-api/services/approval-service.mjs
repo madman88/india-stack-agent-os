@@ -1,7 +1,8 @@
+import { writeProofEvent } from "../adapters/finternet.mjs";
 import { prepareRepaymentMandate } from "../adapters/upi.mjs";
 import { makeProof } from "../lib/proofs.mjs";
 
-export function captureApproval(body) {
+export async function captureApproval(body) {
   const actionState = body.action === "reject" ? "rejected" : "approved";
 
   if (actionState === "rejected") {
@@ -9,7 +10,11 @@ export function captureApproval(body) {
       businessId: body.businessId,
       actionState,
       proofsToPrepend: [
-        makeProof("Owner rejection proof", "Finternet", "Owner declined credit execution; no payment instruction created", "verified")
+        await writeProofEvent({
+          label: "Owner rejection proof",
+          detail: "Owner declined credit execution; no payment instruction created",
+          status: "verified"
+        })
       ],
       messagesToAppend: [
         { from: "owner", text: "Reject this plan for now.", meta: "Owner decision" },
@@ -22,13 +27,20 @@ export function captureApproval(body) {
     };
   }
 
-  const mandate = prepareRepaymentMandate({ amount: 72000, repaymentCapDays: 45 });
+  const [approvalProof, mandate] = await Promise.all([
+    writeProofEvent({
+      label: "Owner approval proof",
+      detail: "Signed approval for Rs 72,000 restock and 45-day repayment cap",
+      status: "verified"
+    }),
+    prepareRepaymentMandate({ amount: 72000, repaymentCapDays: 45 })
+  ]);
 
   return {
     businessId: body.businessId,
     actionState,
     proofsToPrepend: [
-      makeProof("Owner approval proof", "Finternet", "Signed approval for Rs 72,000 restock and 45-day repayment cap", "verified"),
+      approvalProof,
       makeProof("Purchase order created", "ONDC", "PO issued to Shakti Wholesale for fast-moving SKUs"),
       makeProof("UPI AutoPay mandate", mandate.rail, "Repayment instruction prepared for owner confirmation")
     ],

@@ -13,6 +13,7 @@ docker compose up --build
 Services:
 
 - `web`: Vite frontend.
+- `mock-rails`: HTTP-compatible AA, GSTN, ONDC, OCEN, UPI, and Finternet mock services.
 - `mock-api`: contract-compatible service boundary.
 - `localstack`: local AWS-compatible infrastructure.
 
@@ -80,6 +81,14 @@ npm run test:integration
 
 Starts the mock API on an isolated port, runs the contract smoke test, then shuts down the API.
 
+Rail HTTP smoke:
+
+```bash
+npm run test:rails-http
+```
+
+Starts `mock-rails` and `mock-api` on isolated ports, sets `MOCK_RAILS_BASE_URL`, and runs the public `/v1` contract through service-to-service rail calls.
+
 Full local verification:
 
 ```bash
@@ -88,8 +97,9 @@ npm test
 
 Runs integration checks and the production build.
 
-The test harness uses in-memory repositories by default so it does not require Docker or LocalStack. Docker Compose sets `DB_DRIVER=dynamodb` to exercise LocalStack-backed persistence.
+The test harness uses in-memory repositories and in-process rail fixtures by default so it does not require Docker or LocalStack. Docker Compose sets `DB_DRIVER=dynamodb` to exercise LocalStack-backed persistence.
 Docker Compose also sets `RAIL_EVENTS_QUEUE_URL`, which enables SQS publishing and the worker service.
+Docker Compose sets `MOCK_RAILS_BASE_URL=http://mock-rails:8790`, which routes adapter calls over HTTP.
 
 ## Production Rail Integration
 
