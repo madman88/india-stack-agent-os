@@ -6,6 +6,22 @@
     "retries": 1,
     "errorShape": ["rail", "operation", "retryable", "status", "message", "correlationId"]
   },
+  "sandboxProviders": {
+    "AA": {
+      "finvu": {
+        "docs": "https://finvu.github.io/sandbox/",
+        "apiVersion": "1.1.3",
+        "auth": ["client_api_key", "x-jws-signature"],
+        "env": ["AA_BASE_URL", "AA_CLIENT_API_KEY", "AA_JWS_PRIVATE_KEY"]
+      },
+      "setu": {
+        "docs": "https://docs.setu.co/data/account-aggregator/api-integration/consent-flow",
+        "auth": ["Authorization: Bearer", "x-product-instance-id"],
+        "sandboxBaseUrl": "https://fiu-sandbox.setu.co",
+        "env": ["AA_BASE_URL", "AA_ACCESS_TOKEN", "AA_PRODUCT_INSTANCE_ID"]
+      }
+    }
+  },
   "rails": {
     "AA": {
       "operations": {

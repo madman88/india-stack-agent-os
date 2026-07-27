@@ -24,6 +24,13 @@ Needed:
 - Consent creation and consent artifact APIs.
 - Sample consent handle and financial information response.
 
+Candidate sandbox paths from the public docs:
+
+- Finvu AA sandbox: FIU calls use `client_api_key` plus detached JWS in `x-jws-signature`.
+- Setu FIU sandbox: gateway-style API at `https://fiu-sandbox.setu.co` using bearer token plus `x-product-instance-id`.
+
+Run `npm run sandbox:aa:check` after credentials are available.
+
 Adapter operation:
 
 - `readCashflowAttestation`

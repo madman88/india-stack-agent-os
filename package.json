@@ -12,6 +12,7 @@
     "db:seed": "DB_DRIVER=dynamodb node scripts/seed-localstack.mjs",
     "build": "tsc -b && vite build && node scripts/prepare-sites-build.mjs",
     "preview": "vite preview --host 0.0.0.0",
+    "sandbox:aa:check": "node scripts/aa-sandbox-preflight.mjs",
     "test:adapters": "node scripts/adapter-contract-smoke.mjs",
     "test:contracts": "node scripts/contract-smoke.mjs",
     "test:db": "node scripts/db-smoke.mjs",
