@@ -8,7 +8,8 @@ const defaultConfig = {
   endpoint: process.env.AWS_ENDPOINT_URL,
   proofChainTable: process.env.PROOF_CHAIN_TABLE ?? "agent-os-proof-chain",
   businessStateTable: process.env.BUSINESS_STATE_TABLE ?? "agent-os-business-state",
-  approvalsTable: process.env.APPROVALS_TABLE ?? "agent-os-approvals"
+  approvalsTable: process.env.APPROVALS_TABLE ?? "agent-os-approvals",
+  eventLedgerTable: process.env.EVENT_LEDGER_TABLE ?? "agent-os-event-ledger"
 };
 
 function createDocumentClient(config) {
@@ -27,6 +28,7 @@ function createDocumentClient(config) {
 function createMemoryRepositories() {
   const proofEvents = new Map();
   const approvals = new Map();
+  const eventLedger = new Map();
   const snapshots = new Map([[scenario.business.id, scenario]]);
 
   return {
@@ -53,6 +55,16 @@ function createMemoryRepositories() {
     },
     async listApprovals(businessId) {
       return approvals.get(businessId) ?? [];
+    },
+    async hasProcessedEvent(eventId) {
+      return eventLedger.has(eventId);
+    },
+    async markEventProcessed(event) {
+      eventLedger.set(event.eventId, {
+        event,
+        processedAt: new Date().toISOString()
+      });
+      return event;
     }
   };
 }
@@ -147,6 +159,32 @@ function createDynamoRepositories(config) {
       );
 
       return (result.Items ?? []).map((item) => item.approval);
+    },
+    async hasProcessedEvent(eventId) {
+      const result = await doc.send(
+        new GetCommand({
+          TableName: config.eventLedgerTable,
+          Key: { event_id: eventId }
+        })
+      );
+
+      return Boolean(result.Item);
+    },
+    async markEventProcessed(event) {
+      await doc.send(
+        new PutCommand({
+          TableName: config.eventLedgerTable,
+          Item: {
+            event_id: event.eventId,
+            event,
+            event_type: event.type,
+            business_id: event.businessId,
+            processed_at: new Date().toISOString()
+          },
+          ConditionExpression: "attribute_not_exists(event_id)"
+        })
+      );
+      return event;
     }
   };
 }

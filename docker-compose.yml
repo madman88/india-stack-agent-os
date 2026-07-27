@@ -26,8 +26,30 @@ services:
       PROOF_CHAIN_TABLE: agent-os-proof-chain
       BUSINESS_STATE_TABLE: agent-os-business-state
       APPROVALS_TABLE: agent-os-approvals
+      EVENT_LEDGER_TABLE: agent-os-event-ledger
+      RAIL_EVENTS_QUEUE_URL: http://sqs.ap-south-1.localhost.localstack.cloud:4566/000000000000/agent-os-rail-events
     ports:
       - "8787:8787"
+    volumes:
+      - .:/app
+    depends_on:
+      - localstack
+
+  worker:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev:worker"
+    environment:
+      DB_DRIVER: dynamodb
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_REGION: ap-south-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      PROOF_CHAIN_TABLE: agent-os-proof-chain
+      BUSINESS_STATE_TABLE: agent-os-business-state
+      APPROVALS_TABLE: agent-os-approvals
+      EVENT_LEDGER_TABLE: agent-os-event-ledger
+      RAIL_EVENTS_QUEUE_URL: http://sqs.ap-south-1.localhost.localstack.cloud:4566/000000000000/agent-os-rail-events
     volumes:
       - .:/app
     depends_on:

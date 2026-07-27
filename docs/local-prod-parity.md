@@ -25,6 +25,7 @@ LocalStack resources live in `infra/terraform/localstack`:
 - DynamoDB table for proof-chain events.
 - DynamoDB table for business snapshots.
 - DynamoDB table for approval decisions.
+- DynamoDB table for processed event IDs.
 - Secrets Manager secret for adapter endpoint config.
 
 Run:
@@ -45,6 +46,12 @@ Run a DB-backed smoke test against a DynamoDB-mode API:
 
 ```bash
 API_BASE_URL=http://localhost:8787 npm run test:db
+```
+
+Run an event-bus smoke test against a DynamoDB/SQS-mode API:
+
+```bash
+API_BASE_URL=http://localhost:8787 npm run test:events
 ```
 
 ## Test Levels
@@ -74,6 +81,7 @@ npm test
 Runs integration checks and the production build.
 
 The test harness uses in-memory repositories by default so it does not require Docker or LocalStack. Docker Compose sets `DB_DRIVER=dynamodb` to exercise LocalStack-backed persistence.
+Docker Compose also sets `RAIL_EVENTS_QUEUE_URL`, which enables SQS publishing and the worker service.
 
 ## Production Rail Integration
 

@@ -81,6 +81,17 @@ resource "aws_dynamodb_table" "approvals" {
   }
 }
 
+resource "aws_dynamodb_table" "event_ledger" {
+  name         = "agent-os-event-ledger"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "event_id"
+
+  attribute {
+    name = "event_id"
+    type = "S"
+  }
+}
+
 resource "aws_secretsmanager_secret" "rail_adapter_config" {
   name = "agent-os/rail-adapters/mock"
 }
@@ -116,4 +127,8 @@ output "business_state_table" {
 
 output "approvals_table" {
   value = aws_dynamodb_table.approvals.name
+}
+
+output "event_ledger_table" {
+  value = aws_dynamodb_table.event_ledger.name
 }

@@ -11,6 +11,7 @@ India Stack Agent OS is contract-first. The frontend talks only to `/v1/*`; loca
 - `services/mock-api/services/` holds business workflows such as working-capital decisions and approvals.
 - `services/mock-api/adapters/` holds mock India Stack rail adapters.
 - `services/mock-api/db/` holds repository implementations for memory and DynamoDB-backed local/prod parity.
+- `services/mock-api/events/` holds event bus publishing and worker handlers for SQS-backed rail events.
 - `services/mock-api/lib/fixtures.mjs` holds shared scenario data for mock API and production demo packaging.
 - `scripts/prepare-sites-build.mjs` creates a self-contained Sites worker artifact for the public demo.
 
@@ -47,6 +48,17 @@ The service uses repository interfaces so local tests can run in memory while Do
 - `agent-os-business-state`: current business snapshot keyed by `business_id`.
 - `agent-os-proof-chain`: proof events keyed by `business_id` and `proof_id`.
 - `agent-os-approvals`: owner approval or rejection decisions keyed by `business_id` and `approval_id`.
+- `agent-os-event-ledger`: processed event IDs for idempotent worker execution.
+
+## Event Bus
+
+Approval capture publishes rail events to `agent-os-rail-events` when `RAIL_EVENTS_QUEUE_URL` is set:
+
+- `approval.captured`
+- `upi.mandate.prepared`
+- `ondc.purchase_order.created`
+
+The worker consumes SQS messages, writes event-derived proof events, and records each `event_id` in the event ledger before acknowledging the message. Replayed messages are acknowledged without duplicate proof writes.
 
 ## Local/Production Parity
 

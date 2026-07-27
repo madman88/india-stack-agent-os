@@ -1,6 +1,7 @@
 import { createWorkingCapitalDecision, answerAgentMessage } from "./services/agent-service.mjs";
 import { captureApproval } from "./services/approval-service.mjs";
 import { repositories } from "./db/repositories.mjs";
+import { createDomainEvent, eventBus } from "./events/event-bus.mjs";
 import { businessId, scenario } from "./lib/fixtures.mjs";
 
 export async function routeRequest({ method, pathname, searchParams, body = {} }) {
@@ -9,7 +10,7 @@ export async function routeRequest({ method, pathname, searchParams, body = {} }
   }
 
   if (method === "GET" && pathname === "/health") {
-    return { status: 200, body: { status: "ok", service: "mock-api", db: repositories.mode } };
+    return { status: 200, body: { status: "ok", service: "mock-api", db: repositories.mode, eventBus: eventBus.mode } };
   }
 
   if (method === "GET" && pathname === `/v1/businesses/${businessId}/snapshot`) {
@@ -27,6 +28,7 @@ export async function routeRequest({ method, pathname, searchParams, body = {} }
     const approval = captureApproval({ ...body, businessId: body.businessId ?? businessId });
     await repositories.putApproval(approval.businessId, approval);
     await repositories.appendProofEvents(approval.businessId, approval.proofsToPrepend);
+    await publishApprovalEvents(approval, body.idempotencyKey);
 
     return {
       status: 200,
@@ -56,4 +58,36 @@ export async function routeRequest({ method, pathname, searchParams, body = {} }
   }
 
   return { status: 404, body: { error: "not_found", path: pathname } };
+}
+
+async function publishApprovalEvents(approval, idempotencyKey) {
+  const eventBase = {
+    businessId: approval.businessId,
+    idempotencyKey: idempotencyKey ?? `${approval.businessId}:${approval.actionState}:${approval.proofsToPrepend[0]?.hash}`,
+    payload: {
+      actionState: approval.actionState,
+      proofIds: approval.proofsToPrepend.map((proof) => proof.id)
+    }
+  };
+
+  await eventBus.publish(createDomainEvent({ ...eventBase, type: "approval.captured" }));
+
+  if (approval.actionState !== "approved") {
+    return;
+  }
+
+  await eventBus.publish(
+    createDomainEvent({
+      ...eventBase,
+      type: "upi.mandate.prepared",
+      idempotencyKey: `${eventBase.idempotencyKey}:upi`
+    })
+  );
+  await eventBus.publish(
+    createDomainEvent({
+      ...eventBase,
+      type: "ondc.purchase_order.created",
+      idempotencyKey: `${eventBase.idempotencyKey}:ondc`
+    })
+  );
 }
