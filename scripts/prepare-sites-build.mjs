@@ -115,6 +115,38 @@ function handleMessage(body) {
   };
 }
 
+function setuConsent(body = {}) {
+  const id = body.id ?? "setu-consent-ravi-001";
+  return {
+    provider: "setu",
+    id,
+    status: body.status ?? "PENDING",
+    url: "https://fiu-sandbox.setu.co/v2/consents/webview/" + id,
+    redirectUrl: "https://fiu-sandbox.setu.co/v2/consents/webview/" + id,
+    traceId: "trace-setu-sites-001",
+    detail: {
+      vua: body.vua ?? "9999999999@setu",
+      purpose: "Loan underwriting",
+      purposeCode: "101",
+      fiTypes: ["DEPOSIT"],
+      dataRange: body.dataRange ?? null,
+      consentTypes: ["TRANSACTIONS", "PROFILE", "SUMMARY"]
+    }
+  };
+}
+
+function setuNotification(body = {}) {
+  return {
+    provider: "setu",
+    eventType: body.eventType ?? body.type ?? "consent.notification",
+    consentId: body.consentId ?? body.id ?? (body.consent && body.consent.id) ?? null,
+    status: body.status ?? (body.consent && body.consent.status) ?? null,
+    traceId: body.traceId ?? null,
+    receivedAt: new Date().toISOString(),
+    raw: body
+  };
+}
+
 async function handleApi(request, url) {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -122,6 +154,28 @@ async function handleApi(request, url) {
 
   if (request.method === "GET" && url.pathname === "/health") {
     return json({ status: "ok", service: "sites-worker" });
+  }
+
+  if (request.method === "GET" && url.pathname === "/v1/rails/aa/setu/preflight") {
+    return json({
+      provider: "setu",
+      mode: "sites-demo",
+      baseUrl: "https://fiu-sandbox.setu.co",
+      missing: ["AA_ACCESS_TOKEN", "AA_PRODUCT_INSTANCE_ID"]
+    });
+  }
+
+  if (request.method === "POST" && url.pathname === "/v1/rails/aa/consents") {
+    return json(setuConsent(await request.json()));
+  }
+
+  const aaConsentMatch = url.pathname.match(/^\\/v1\\/rails\\/aa\\/consents\\/([^/]+)$/);
+  if (request.method === "GET" && aaConsentMatch) {
+    return json(setuConsent({ id: aaConsentMatch[1], status: "ACTIVE" }));
+  }
+
+  if (request.method === "POST" && url.pathname === "/v1/rails/aa/callback") {
+    return json(setuNotification(await request.json()));
   }
 
   if (request.method === "GET" && url.pathname === "/v1/businesses/" + businessId + "/snapshot") {

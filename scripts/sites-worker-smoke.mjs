@@ -33,4 +33,26 @@ assert(body.evidence.cashflow.rail === "AA", "worker AA evidence missing");
 assert(body.evidence.demand.rail === "ONDC", "worker ONDC evidence missing");
 assert(body.evidence.compliance.rail === "GSTN", "worker GSTN evidence missing");
 
+const setuPreflight = await mod.default.fetch(new Request("https://example.test/v1/rails/aa/setu/preflight"));
+assert(setuPreflight.status === 200, `Setu preflight returned ${setuPreflight.status}`);
+const preflightBody = await setuPreflight.json();
+assert(preflightBody.provider === "setu", "Setu preflight provider mismatch");
+assert(Array.isArray(preflightBody.missing), "Setu preflight missing list invalid");
+
+const consent = await mod.default.fetch(
+  new Request("https://example.test/v1/rails/aa/consents", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ vua: "9999999999@setu" })
+  })
+);
+assert(consent.status === 200, `Setu consent returned ${consent.status}`);
+const consentBody = await consent.json();
+assert(consentBody.provider === "setu", "Setu consent provider mismatch");
+assert(consentBody.status === "PENDING", "Setu consent status mismatch");
+
+const consentStatus = await mod.default.fetch(new Request(`https://example.test/v1/rails/aa/consents/${consentBody.id}`));
+const consentStatusBody = await consentStatus.json();
+assert(consentStatusBody.status === "ACTIVE", "Setu consent status route mismatch");
+
 console.log("sites worker smoke passed");
