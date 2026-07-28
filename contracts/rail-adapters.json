@@ -32,6 +32,22 @@
           "requiresConsentRef": true,
           "irreversible": false,
           "normalizedShape": ["rail", "inflow90d", "averageDailyBalance", "volatility", "consent"]
+        },
+        "createSetuConsent": {
+          "method": "POST",
+          "path": "/v2/consents",
+          "authMode": "setu-bearer-product-instance",
+          "requiresConsentRef": false,
+          "irreversible": false,
+          "normalizedShape": ["provider", "id", "status", "url", "redirectUrl", "traceId", "detail"]
+        },
+        "getSetuConsent": {
+          "method": "GET",
+          "path": "/v2/consents/:id",
+          "authMode": "setu-bearer-product-instance",
+          "requiresConsentRef": true,
+          "irreversible": false,
+          "normalizedShape": ["provider", "id", "status", "url", "redirectUrl", "traceId", "detail"]
         }
       }
     },

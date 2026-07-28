@@ -33,6 +33,33 @@ function demandSignals() {
   };
 }
 
+function setuConsent(body) {
+  const id = body.id ?? "setu-consent-ravi-001";
+  return {
+    id,
+    url: `https://fiu-sandbox.setu.co/v2/consents/webview/${id}`,
+    status: body.status ?? "PENDING",
+    detail: {
+      consentStart: new Date().toISOString(),
+      fiTypes: ["DEPOSIT"],
+      fetchType: "PERIODIC",
+      purpose: {
+        refUri: "https://api.rebit.org.in/aa/purpose/101.xml",
+        code: "101",
+        text: "Loan underwriting"
+      },
+      vua: body.vua ?? "9999999999@setu",
+      dataRange: body.dataRange,
+      consentTypes: ["TRANSACTIONS", "PROFILE", "SUMMARY"],
+      consentMode: "STORE"
+    },
+    redirectUrl: "https://india-stack-agent-os.madhusudan-prahlad.chatgpt.site",
+    context: body.context ?? [],
+    tags: body.additionalParams?.tags ?? [],
+    traceId: "trace-setu-mock-001"
+  };
+}
+
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
@@ -57,6 +84,15 @@ const server = createServer(async (req, res) => {
           status: "purpose-bound"
         }
       });
+    }
+
+    if (req.method === "POST" && url.pathname === "/v2/consents") {
+      return json(res, 200, setuConsent(await readJson(req)));
+    }
+
+    const consentMatch = url.pathname.match(/^\/v2\/consents\/([^/]+)$/);
+    if (req.method === "GET" && consentMatch) {
+      return json(res, 200, setuConsent({ id: consentMatch[1], status: "ACTIVE" }));
     }
 
     if (req.method === "GET" && url.pathname === "/gstn/compliance") {

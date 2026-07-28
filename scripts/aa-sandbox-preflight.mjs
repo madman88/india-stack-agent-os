@@ -1,4 +1,4 @@
-const provider = process.env.AA_SANDBOX_PROVIDER ?? "finvu";
+const provider = process.env.AA_SANDBOX_PROVIDER ?? "setu";
 
 const providers = {
   finvu: {

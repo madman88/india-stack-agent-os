@@ -1,5 +1,6 @@
 import { createWorkingCapitalDecision, answerAgentMessage } from "./services/agent-service.mjs";
 import { captureApproval } from "./services/approval-service.mjs";
+import { createSetuConsent, getSetuConsent, normalizeSetuNotification, setuAaCredentialStatus } from "./rails/setu-aa-client.mjs";
 import { repositories } from "./db/repositories.mjs";
 import { createDomainEvent, eventBus } from "./events/event-bus.mjs";
 import { businessId, scenario } from "./lib/fixtures.mjs";
@@ -11,6 +12,23 @@ export async function routeRequest({ method, pathname, searchParams, body = {} }
 
   if (method === "GET" && pathname === "/health") {
     return { status: 200, body: { status: "ok", service: "mock-api", db: repositories.mode, eventBus: eventBus.mode } };
+  }
+
+  if (method === "GET" && pathname === "/v1/rails/aa/setu/preflight") {
+    return { status: 200, body: setuAaCredentialStatus() };
+  }
+
+  if (method === "POST" && pathname === "/v1/rails/aa/consents") {
+    return { status: 200, body: await createSetuConsent(body) };
+  }
+
+  const aaConsentMatch = pathname.match(/^\/v1\/rails\/aa\/consents\/([^/]+)$/);
+  if (method === "GET" && aaConsentMatch) {
+    return { status: 200, body: await getSetuConsent(aaConsentMatch[1]) };
+  }
+
+  if (method === "POST" && pathname === "/v1/rails/aa/callback") {
+    return { status: 200, body: normalizeSetuNotification(body) };
   }
 
   if (method === "GET" && pathname === `/v1/businesses/${businessId}/snapshot`) {

@@ -15,7 +15,7 @@ Sahamati says only entities registered and regulated by RBI, SEBI, IRDAI, or PFR
 
 Finvu sandbox docs state that FIU calls use `client_api_key` and `x-jws-signature`, and that request/response bodies need detached JWS signatures.
 
-Setu docs show a gateway-style sandbox at `https://fiu-sandbox.setu.co`, with `Authorization: Bearer <access_token>` and `x-product-instance-id` headers for consent APIs.
+Setu docs show a gateway-style sandbox at `https://fiu-sandbox.setu.co`, with `Authorization: Bearer <access_token>` and `x-product-instance-id` headers for consent APIs. The consent flow starts with `POST /consents`, returns an `id`, `status = PENDING`, and a redirect `url`, then status is read with `GET /consents/:id`. Their docs also note notification/webhook support and mock Setu FIP/FIP-2 accounts for staging data.
 
 ## Repo Support Added
 
@@ -23,6 +23,16 @@ Use this once credentials exist:
 
 ```bash
 npm run sandbox:aa:check
+```
+
+Default Setu-style integration:
+
+```bash
+AA_SANDBOX_PROVIDER=setu
+AA_BASE_URL=https://fiu-sandbox.setu.co
+AA_ACCESS_TOKEN=
+AA_PRODUCT_INSTANCE_ID=
+AA_CALLBACK_BASE_URL=
 ```
 
 For Finvu-style integration:
@@ -36,17 +46,22 @@ AA_JWS_KEY_ID=
 AA_CALLBACK_BASE_URL=
 ```
 
-For Setu-style integration:
+The preflight script reports missing credentials without failing, so we can keep it in the repo before onboarding is complete.
+
+Setu routes now scaffolded locally:
 
 ```bash
-AA_SANDBOX_PROVIDER=setu
-AA_BASE_URL=https://fiu-sandbox.setu.co
-AA_ACCESS_TOKEN=
-AA_PRODUCT_INSTANCE_ID=
-AA_CALLBACK_BASE_URL=
+GET  /v1/rails/aa/setu/preflight
+POST /v1/rails/aa/consents
+GET  /v1/rails/aa/consents/:id
+POST /v1/rails/aa/callback
 ```
 
-The preflight script reports missing credentials without failing, so we can keep it in the repo before onboarding is complete.
+Local mock Setu consent flow is covered by:
+
+```bash
+npm run test:setu-aa
+```
 
 ## Practical Onboarding Ask
 

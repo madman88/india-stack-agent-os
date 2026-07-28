@@ -43,6 +43,17 @@ The first closed loop is MSME working capital:
 6. Prepare UPI repayment mandate.
 7. Append proof events for audit.
 
+## AA Consent Scaffold
+
+Setu is the selected first AA sandbox path. The API exposes local routes for consent creation, status polling, preflight, and webhook normalization:
+
+- `GET /v1/rails/aa/setu/preflight`
+- `POST /v1/rails/aa/consents`
+- `GET /v1/rails/aa/consents/:id`
+- `POST /v1/rails/aa/callback`
+
+These run against `mock-rails` locally and can point at Setu sandbox once `AA_BASE_URL`, `AA_ACCESS_TOKEN`, and `AA_PRODUCT_INSTANCE_ID` are available.
+
 ## Databases
 
 The service uses repository interfaces so local tests can run in memory while Docker Compose can use LocalStack DynamoDB:

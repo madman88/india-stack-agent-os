@@ -97,6 +97,14 @@ npm run test:rails-http
 
 Starts `mock-rails` and `mock-api` on isolated ports, sets `MOCK_RAILS_BASE_URL`, and runs the public `/v1` contract through service-to-service rail calls.
 
+Setu AA smoke:
+
+```bash
+npm run test:setu-aa
+```
+
+Starts `mock-rails` and `mock-api`, then verifies Setu consent create, status, and callback routes.
+
 Full local verification:
 
 ```bash
