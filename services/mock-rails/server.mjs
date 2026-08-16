@@ -60,6 +60,40 @@ function setuConsent(body) {
   };
 }
 
+function setuDataSession(body) {
+  const id = body.id ?? "setu-session-ravi-001";
+  return {
+    id,
+    consentId: body.consentId ?? "setu-consent-ravi-001",
+    status: "COMPLETED",
+    format: body.format ?? "json",
+    dataRange: body.dataRange ?? null,
+    traceId: "trace-setu-session-001",
+    fips: [
+      {
+        fipID: "Setu-FIP",
+        accounts: [
+          {
+            maskedAccNumber: "XXXXXX4373",
+            FIstatus: "READY",
+            data: {
+              summary: { currentBalance: "62000" },
+              transactions: {
+                transaction: [
+                  { transactionType: "CREDIT", amount: "180000" },
+                  { transactionType: "CREDIT", amount: "155000" },
+                  { transactionType: "CREDIT", amount: "145000" },
+                  { transactionType: "DEBIT", amount: "93000" }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  };
+}
+
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
@@ -93,6 +127,15 @@ const server = createServer(async (req, res) => {
     const consentMatch = url.pathname.match(/^\/v2\/consents\/([^/]+)$/);
     if (req.method === "GET" && consentMatch) {
       return json(res, 200, setuConsent({ id: consentMatch[1], status: "ACTIVE" }));
+    }
+
+    if (req.method === "POST" && url.pathname === "/v2/sessions") {
+      return json(res, 200, setuDataSession(await readJson(req)));
+    }
+
+    const sessionMatch = url.pathname.match(/^\/v2\/sessions\/([^/]+)$/);
+    if (req.method === "GET" && sessionMatch) {
+      return json(res, 200, setuDataSession({ id: sessionMatch[1] }));
     }
 
     if (req.method === "GET" && url.pathname === "/gstn/compliance") {

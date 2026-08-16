@@ -63,6 +63,30 @@
         }
       }
     },
+    "DigiLocker": {
+      "operations": {
+        "readVerifiedDocument": {
+          "method": "GET",
+          "path": "/digilocker/documents/:id",
+          "authMode": "oauth2-authorization-code",
+          "requiresConsentRef": true,
+          "irreversible": false,
+          "normalizedShape": ["rail", "documentType", "issuer", "holder", "status"]
+        }
+      }
+    },
+    "BBPS": {
+      "operations": {
+        "readBillObligations": {
+          "method": "GET",
+          "path": "/bbps/bills",
+          "authMode": "partner-token",
+          "requiresConsentRef": false,
+          "irreversible": false,
+          "normalizedShape": ["rail", "bills", "summary"]
+        }
+      }
+    },
     "ONDC": {
       "operations": {
         "readDemandSignals": {

@@ -39,6 +39,16 @@ Adapter operation:
 - `readCashflowAttestation`
 - Normalized output: cashflow, balance, volatility, and purpose-bound consent reference.
 
+### Setu AA Implementation Flow
+
+1. Create consent through `POST /v1/rails/aa/consents` and redirect the customer to the returned Setu URL.
+2. Receive the consent notification at `POST /v1/rails/aa/callback`, then confirm the consent is active with `GET /v1/rails/aa/consents/:id`.
+3. Create a JSON financial-information session through `POST /v1/rails/aa/sessions` with the approved consent ID and permitted data range.
+4. Wait for the Setu FI-data notification, then fetch the session at `GET /v1/rails/aa/sessions/:id` only when its status is `PARTIAL` or `COMPLETED`.
+5. Read the normalized affordability evidence at `GET /v1/rails/aa/sessions/:id/cashflow`.
+
+The service never puts AA credentials in the browser. Configure the Setu Bridge webhook to reach the deployed backend over HTTPS. Verify the provider's configured notification-authentication mechanism before persisting or acting on a callback.
+
 ### GSTN
 
 Needed:
@@ -147,3 +157,77 @@ Store these in the deployment environment or a secrets manager, not in `.env` co
 7. Only then point a deployed environment at sandbox credentials.
 
 Do irreversible operations last. Start with AA/GSTN/ONDC read paths, then OCEN offer discovery, then UPI mandate preparation and Finternet proof writes.
+
+## Sandbox-Ready Strategy Without Full Data
+
+When credentials or test identities are missing, keep the integration shape but preserve the mock fallback.
+
+Use this rule for every rail:
+
+- if sandbox credentials exist, use the sandbox adapter path;
+- if only fixture or sample payloads exist, normalize them through the existing adapter;
+- if neither exists, keep the in-process or mock-http path and surface the missing inputs in preflight.
+
+That lets us make the whole product sandbox-ready in this order:
+
+1. AA read flow and consent/session lifecycle.
+2. GSTN compliance read flow.
+3. ONDC demand signal read flow.
+4. OCEN offer discovery.
+5. UPI repayment mandate preparation.
+6. Finternet proof write flow.
+7. DigiLocker verified-document reads.
+8. BBPS bill obligation reads.
+
+For DigiLocker and BBPS, we are currently keeping the sandbox-ready adapter shape and using fixture/mock fallback until real partner access or test credentials are available.
+
+## What To Test Locally
+
+Run these in order:
+
+1. Install and start the local app.
+
+```bash
+npm install
+npm run dev
+```
+
+2. Run the AA sandbox-ready smoke test.
+
+```bash
+node scripts/setu-aa-smoke.mjs
+```
+
+3. Run adapter contract checks.
+
+```bash
+npm run test:adapters
+npm run test:fixtures
+```
+
+4. Run the app-level smoke and integration checks.
+
+```bash
+npm run test:integration
+npm run test:rails-http
+```
+
+5. Run the production build.
+
+```bash
+npm run build
+```
+
+6. If you later have sandbox credentials, export them and run the preflight check before switching any environment to sandbox.
+
+```bash
+npm run sandbox:aa:check
+```
+
+Expected behavior while you are still missing real data:
+
+- UI should work with mock/local AA state.
+- Consent should create successfully.
+- Session should create after consent.
+- Cashflow should normalize from the mock session.
+- Other rails should keep using their current mock/fixture paths.

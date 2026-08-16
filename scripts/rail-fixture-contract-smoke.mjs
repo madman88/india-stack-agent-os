@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { normalizeCashflowAttestation } from "../services/mock-api/adapters/normalizers/aa.mjs";
 import { normalizeComplianceAttestation } from "../services/mock-api/adapters/normalizers/gstn.mjs";
+import { normalizeVerifiedDocument } from "../services/mock-api/adapters/normalizers/digilocker.mjs";
+import { normalizeBillObligations } from "../services/mock-api/adapters/normalizers/bbps.mjs";
 import { normalizeDemandSignals } from "../services/mock-api/adapters/normalizers/ondc.mjs";
 import { normalizeCreditOffers } from "../services/mock-api/adapters/normalizers/ocen.mjs";
 import { normalizeRepaymentMandate } from "../services/mock-api/adapters/normalizers/upi.mjs";
@@ -35,6 +37,12 @@ assert(cashflow.consent.id === "consent-ravi-aa-001", "AA consent id missing");
 
 const compliance = normalizeComplianceAttestation(await readJson("fixtures/rails/gstn/compliance.json"));
 assertKeys(compliance, contract.rails.GSTN.operations.readComplianceAttestation.normalizedShape, "GSTN fixture normalization");
+
+const document = normalizeVerifiedDocument(await readJson("fixtures/rails/digilocker/document.json"));
+assertKeys(document, contract.rails.DigiLocker.operations.readVerifiedDocument.normalizedShape, "DigiLocker fixture normalization");
+
+const bills = normalizeBillObligations(await readJson("fixtures/rails/bbps/bills.json"));
+assertKeys(bills, contract.rails.BBPS.operations.readBillObligations.normalizedShape, "BBPS fixture normalization");
 
 const demand = normalizeDemandSignals(await readJson("fixtures/rails/ondc/demand.json"));
 assertKeys(demand, contract.rails.ONDC.operations.readDemandSignals.normalizedShape, "ONDC fixture normalization");

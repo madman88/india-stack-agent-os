@@ -4,6 +4,8 @@ import { join } from "node:path";
 const fixturePaths = {
   "AA.readCashflowAttestation": "fixtures/rails/aa/cashflow.json",
   "GSTN.readComplianceAttestation": "fixtures/rails/gstn/compliance.json",
+  "DigiLocker.readVerifiedDocument": "fixtures/rails/digilocker/document.json",
+  "BBPS.readBillObligations": "fixtures/rails/bbps/bills.json",
   "ONDC.readDemandSignals": "fixtures/rails/ondc/demand.json",
   "OCEN.discoverCreditOffers": "fixtures/rails/ocen/offers.json",
   "UPI.prepareRepaymentMandate": "fixtures/rails/upi/mandate.json",

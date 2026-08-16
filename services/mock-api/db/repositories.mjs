@@ -29,6 +29,9 @@ function createMemoryRepositories() {
   const proofEvents = new Map();
   const approvals = new Map();
   const eventLedger = new Map();
+  const aaConsents = new Map();
+  const aaSessions = new Map();
+  const aaAuditLogs = new Map();
   const snapshots = new Map([[scenario.business.id, scenario]]);
 
   return {
@@ -65,6 +68,35 @@ function createMemoryRepositories() {
         processedAt: new Date().toISOString()
       });
       return event;
+    },
+    async upsertAaConsent(businessId, consent) {
+      aaConsents.set(consent.id, { ...consent, businessId, updatedAt: new Date().toISOString() });
+      return aaConsents.get(consent.id);
+    },
+    async getAaConsent(consentId) {
+      return aaConsents.get(consentId) ?? null;
+    },
+    async listAaConsents(businessId) {
+      return [...aaConsents.values()].filter((item) => item.businessId === businessId);
+    },
+    async upsertAaSession(businessId, session) {
+      aaSessions.set(session.id, { ...session, businessId, updatedAt: new Date().toISOString() });
+      return aaSessions.get(session.id);
+    },
+    async getAaSession(sessionId) {
+      return aaSessions.get(sessionId) ?? null;
+    },
+    async listAaSessions(businessId) {
+      return [...aaSessions.values()].filter((item) => item.businessId === businessId);
+    },
+    async appendAaAuditLog(businessId, entry) {
+      const current = aaAuditLogs.get(businessId) ?? [];
+      const item = { ...entry, createdAt: new Date().toISOString() };
+      aaAuditLogs.set(businessId, [item, ...current]);
+      return item;
+    },
+    async listAaAuditLogs(businessId) {
+      return aaAuditLogs.get(businessId) ?? [];
     }
   };
 }
@@ -185,6 +217,105 @@ function createDynamoRepositories(config) {
         })
       );
       return event;
+    },
+    async upsertAaConsent(businessId, consent) {
+      await doc.send(
+        new PutCommand({
+          TableName: config.aaConsentTable,
+          Item: {
+            consent_id: consent.id,
+            business_id: businessId,
+            consent,
+            updated_at: new Date().toISOString()
+          }
+        })
+      );
+      return { ...consent, businessId };
+    },
+    async getAaConsent(consentId) {
+      const result = await doc.send(
+        new GetCommand({
+          TableName: config.aaConsentTable,
+          Key: { consent_id: consentId }
+        })
+      );
+      return result.Item?.consent ?? null;
+    },
+    async listAaConsents(businessId) {
+      const result = await doc.send(
+        new QueryCommand({
+          TableName: config.aaConsentTable,
+          KeyConditionExpression: "business_id = :businessId",
+          ExpressionAttributeValues: {
+            ":businessId": businessId
+          },
+          ScanIndexForward: false
+        })
+      );
+      return (result.Items ?? []).map((item) => item.consent);
+    },
+    async upsertAaSession(businessId, session) {
+      await doc.send(
+        new PutCommand({
+          TableName: config.aaSessionTable,
+          Item: {
+            session_id: session.id,
+            business_id: businessId,
+            session,
+            updated_at: new Date().toISOString()
+          }
+        })
+      );
+      return { ...session, businessId };
+    },
+    async getAaSession(sessionId) {
+      const result = await doc.send(
+        new GetCommand({
+          TableName: config.aaSessionTable,
+          Key: { session_id: sessionId }
+        })
+      );
+      return result.Item?.session ?? null;
+    },
+    async listAaSessions(businessId) {
+      const result = await doc.send(
+        new QueryCommand({
+          TableName: config.aaSessionTable,
+          KeyConditionExpression: "business_id = :businessId",
+          ExpressionAttributeValues: {
+            ":businessId": businessId
+          },
+          ScanIndexForward: false
+        })
+      );
+      return (result.Items ?? []).map((item) => item.session);
+    },
+    async appendAaAuditLog(businessId, entry) {
+      await doc.send(
+        new PutCommand({
+          TableName: config.aaAuditLogTable,
+          Item: {
+            business_id: businessId,
+            entry_id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+            entry,
+            created_at: new Date().toISOString()
+          }
+        })
+      );
+      return entry;
+    },
+    async listAaAuditLogs(businessId) {
+      const result = await doc.send(
+        new QueryCommand({
+          TableName: config.aaAuditLogTable,
+          KeyConditionExpression: "business_id = :businessId",
+          ExpressionAttributeValues: {
+            ":businessId": businessId
+          },
+          ScanIndexForward: false
+        })
+      );
+      return (result.Items ?? []).map((item) => item.entry);
     }
   };
 }

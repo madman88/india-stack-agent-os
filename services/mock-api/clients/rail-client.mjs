@@ -7,9 +7,11 @@ const defaultConfig = {
 const railBaseUrlEnv = {
   AA: "AA_BASE_URL",
   GSTN: "GSTN_BASE_URL",
+  DigiLocker: "DIGILOCKER_BASE_URL",
   ONDC: "ONDC_BASE_URL",
   OCEN: "OCEN_BASE_URL",
   UPI: "UPI_BASE_URL",
+  BBPS: "BBPS_BASE_URL",
   Finternet: "FINTERNET_BASE_URL"
 };
 

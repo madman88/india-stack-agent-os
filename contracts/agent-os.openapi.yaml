@@ -104,6 +104,89 @@ paths:
                     type: string
                   meta:
                     type: string
+  /v1/rails/aa/setu/preflight:
+    get:
+      summary: Report whether Setu AA credentials are configured
+      responses:
+        "200":
+          description: Setu adapter configuration status
+  /v1/rails/aa/consents:
+    post:
+      summary: Create a Setu AA consent request
+      responses:
+        "200":
+          description: Pending consent and customer redirect URL
+  /v1/rails/aa/consents/{consentId}:
+    get:
+      summary: Get Setu AA consent status
+      parameters:
+        - name: consentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Consent status
+  /v1/rails/aa/sessions:
+    post:
+      summary: Create a Setu AA financial-information data session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [consentId, dataRange]
+              properties:
+                consentId:
+                  type: string
+                dataRange:
+                  type: object
+                  required: [from, to]
+                  properties:
+                    from:
+                      type: string
+                      format: date-time
+                    to:
+                      type: string
+                      format: date-time
+                format:
+                  type: string
+                  enum: [json]
+      responses:
+        "200":
+          description: Data session status
+  /v1/rails/aa/sessions/{sessionId}:
+    get:
+      summary: Fetch a Setu AA data session when it is ready
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Normalized data session
+  /v1/rails/aa/sessions/{sessionId}/cashflow:
+    get:
+      summary: Normalize an eligible Setu AA data session into cashflow evidence
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Cashflow attestation generated from consented financial information
+  /v1/rails/aa/callback:
+    post:
+      summary: Receive a Setu AA consent or FI-data notification
+      responses:
+        "200":
+          description: Normalized notification
   /v1/proof-chain:
     get:
       summary: Proof chain events

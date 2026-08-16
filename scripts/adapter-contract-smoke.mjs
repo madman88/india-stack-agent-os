@@ -4,6 +4,8 @@ import { discoverCreditOffers } from "../services/mock-api/adapters/ocen.mjs";
 import { readDemandSignals } from "../services/mock-api/adapters/ondc.mjs";
 import { prepareRepaymentMandate } from "../services/mock-api/adapters/upi.mjs";
 import { writeProofEvent } from "../services/mock-api/adapters/finternet.mjs";
+import { readVerifiedDocument } from "../services/mock-api/adapters/digilocker.mjs";
+import { readBillObligations } from "../services/mock-api/adapters/bbps.mjs";
 import { createWorkingCapitalDecision } from "../services/mock-api/services/agent-service.mjs";
 import { captureApproval } from "../services/mock-api/services/approval-service.mjs";
 
@@ -36,6 +38,16 @@ assertKeys(compliance, ["rail", "filingStreakMonths", "openLiability", "status"]
 assert(compliance.rail === "GSTN", "GSTN rail mismatch");
 assert(Number.isFinite(compliance.filingStreakMonths), "GSTN filing streak must be numeric");
 assert(typeof compliance.openLiability === "boolean", "GSTN open liability must be boolean");
+
+const document = await readVerifiedDocument();
+assertKeys(document, ["rail", "documentType", "issuer", "holder", "status"], "DigiLocker document");
+assert(document.rail === "DigiLocker", "DigiLocker rail mismatch");
+assert(document.status === "verified", "DigiLocker document must be verified");
+
+const bills = await readBillObligations();
+assertKeys(bills, ["rail", "bills", "summary"], "BBPS bills");
+assert(bills.rail === "BBPS", "BBPS rail mismatch");
+assert(Array.isArray(bills.bills) && bills.bills.length >= 1, "BBPS bills missing");
 
 const offers = await discoverCreditOffers();
 assert(Array.isArray(offers) && offers.length >= 1, "OCEN offers missing");

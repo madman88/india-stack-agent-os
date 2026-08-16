@@ -76,6 +76,24 @@ try {
   const status = await request(`/v1/rails/aa/consents/${consent.id}`);
   assert(status.status === "ACTIVE", "mock consent status should become active");
 
+  const session = await request("/v1/rails/aa/sessions", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      consentId: consent.id,
+      dataRange: { from: "2026-01-01T00:00:00.000Z", to: "2026-03-31T23:59:59.999Z" },
+      format: "json"
+    })
+  });
+  assert(session.provider === "setu", "data-session provider mismatch");
+  assert(session.status === "COMPLETED", "mock data session should be completed");
+
+  const cashflow = await request(`/v1/rails/aa/sessions/${session.id}/cashflow`);
+  assert(cashflow.rail === "AA", "cashflow rail mismatch");
+  assert(cashflow.inflow90d === 480000, "cashflow must sum credit transactions");
+  assert(cashflow.averageDailyBalance === 62000, "cashflow balance mismatch");
+  assert(cashflow.source.sessionId === session.id, "cashflow must identify source session");
+
   const callback = await request("/v1/rails/aa/callback", {
     method: "POST",
     headers: { "content-type": "application/json" },

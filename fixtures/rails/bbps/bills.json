@@ -1,0 +1,17 @@
+{
+  "rail": "BBPS",
+  "summary": {
+    "totalOutstanding": 8420,
+    "dueSoon": 1,
+    "nextDueDate": "2026-08-19"
+  },
+  "bills": [
+    {
+      "biller": "BESCOM",
+      "label": "Electricity bill",
+      "amount": 8420,
+      "dueDate": "2026-08-19",
+      "status": "due"
+    }
+  ]
+}

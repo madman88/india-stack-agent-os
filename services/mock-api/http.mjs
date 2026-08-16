@@ -1,6 +1,14 @@
 import { createWorkingCapitalDecision, answerAgentMessage } from "./services/agent-service.mjs";
 import { captureApproval } from "./services/approval-service.mjs";
-import { createSetuConsent, getSetuConsent, normalizeSetuNotification, setuAaCredentialStatus } from "./rails/setu-aa-client.mjs";
+import {
+  createSetuConsent,
+  createSetuDataSession,
+  getSetuCashflowAttestation,
+  getSetuConsent,
+  getSetuDataSession,
+  normalizeSetuNotification,
+  setuAaCredentialStatus
+} from "./rails/setu-aa-client.mjs";
 import { repositories } from "./db/repositories.mjs";
 import { createDomainEvent, eventBus } from "./events/event-bus.mjs";
 import { businessId, scenario } from "./lib/fixtures.mjs";
@@ -18,17 +26,83 @@ export async function routeRequest({ method, pathname, searchParams, body = {} }
     return { status: 200, body: setuAaCredentialStatus() };
   }
 
+  if (method === "GET" && pathname === "/v1/rails/aa/state") {
+    const requestedBusinessId = searchParams.get("businessId") ?? businessId;
+    return {
+      status: 200,
+      body: await buildAaState(requestedBusinessId)
+    };
+  }
+
   if (method === "POST" && pathname === "/v1/rails/aa/consents") {
-    return { status: 200, body: await createSetuConsent(body) };
+    const consent = await createSetuConsent(body);
+    await repositories.upsertAaConsent(body.businessId ?? businessId, consent);
+    await repositories.appendAaAuditLog(body.businessId ?? businessId, {
+      rail: "AA",
+      action: "consent.created",
+      consentId: consent.id,
+      status: consent.status,
+      traceId: consent.traceId ?? null
+    });
+    return { status: 200, body: consent };
+  }
+
+  if (method === "POST" && pathname === "/v1/rails/aa/sessions") {
+    const session = await createSetuDataSession(body);
+    await repositories.upsertAaSession(body.businessId ?? businessId, session);
+    await repositories.appendAaAuditLog(body.businessId ?? businessId, {
+      rail: "AA",
+      action: "session.created",
+      consentId: session.consentId,
+      sessionId: session.id,
+      status: session.status,
+      traceId: session.traceId ?? null
+    });
+    return { status: 200, body: session };
   }
 
   const aaConsentMatch = pathname.match(/^\/v1\/rails\/aa\/consents\/([^/]+)$/);
   if (method === "GET" && aaConsentMatch) {
-    return { status: 200, body: await getSetuConsent(aaConsentMatch[1]) };
+    const consent = await getSetuConsent(aaConsentMatch[1]);
+    return { status: 200, body: consent };
+  }
+
+  const aaSessionCashflowMatch = pathname.match(/^\/v1\/rails\/aa\/sessions\/([^/]+)\/cashflow$/);
+  if (method === "GET" && aaSessionCashflowMatch) {
+    const cashflow = await getSetuCashflowAttestation(aaSessionCashflowMatch[1]);
+    return { status: 200, body: cashflow };
+  }
+
+  const aaSessionMatch = pathname.match(/^\/v1\/rails\/aa\/sessions\/([^/]+)$/);
+  if (method === "GET" && aaSessionMatch) {
+    const session = await getSetuDataSession(aaSessionMatch[1]);
+    return { status: 200, body: session };
   }
 
   if (method === "POST" && pathname === "/v1/rails/aa/callback") {
-    return { status: 200, body: normalizeSetuNotification(body) };
+    const notification = normalizeSetuNotification(body);
+    const requestedBusinessId = body.businessId ?? businessId;
+    await repositories.appendAaAuditLog(requestedBusinessId, {
+      rail: "AA",
+      action: "callback.received",
+      consentId: notification.consentId,
+      status: notification.status,
+      eventType: notification.eventType,
+      traceId: notification.traceId ?? null
+    });
+
+    if (notification.consentId) {
+      const existingConsent = await repositories.getAaConsent(notification.consentId);
+      if (existingConsent) {
+        await repositories.upsertAaConsent(requestedBusinessId, {
+          ...existingConsent,
+          status: notification.status ?? existingConsent.status,
+          traceId: notification.traceId ?? existingConsent.traceId ?? null
+        });
+      }
+    }
+
+    return { status: 200, body: notification };
   }
 
   if (method === "GET" && pathname === `/v1/businesses/${businessId}/snapshot`) {
@@ -76,6 +150,26 @@ export async function routeRequest({ method, pathname, searchParams, body = {} }
   }
 
   return { status: 404, body: { error: "not_found", path: pathname } };
+}
+
+async function buildAaState(requestedBusinessId) {
+  const [consents, sessions, auditLogs] = await Promise.all([
+    repositories.listAaConsents(requestedBusinessId),
+    repositories.listAaSessions(requestedBusinessId),
+    repositories.listAaAuditLogs(requestedBusinessId)
+  ]);
+
+  const latestConsent = consents[0] ?? null;
+  const latestSession = sessions[0] ?? null;
+  return {
+    businessId: requestedBusinessId,
+    provider: "setu",
+    credentialStatus: setuAaCredentialStatus(),
+    latestConsent,
+    latestSession,
+    auditLogs,
+    canProceedToSandbox: Boolean(latestConsent?.id) && Boolean(latestSession?.id)
+  };
 }
 
 async function publishApprovalEvents(approval, idempotencyKey) {
