@@ -25,6 +25,11 @@ function assert(condition, message) {
   }
 }
 
+function assertKeys(value, keys, label) {
+  const missing = keys.filter((key) => !(key in value));
+  assert(missing.length === 0, `${label} missing keys: ${missing.join(", ")}`);
+}
+
 const health = await request("/health");
 assert(health.status === "ok", "health status must be ok");
 
@@ -60,6 +65,11 @@ const agent = await request("/v1/agent/messages", {
   body: JSON.stringify({ businessId: "ravi-stores", message: "why", proofCount: 4, verifiedProofCount: 3 })
 });
 assert(typeof agent.message === "string" && agent.message.length > 20, "agent response invalid");
+
+const aaState = await request("/v1/rails/aa/state?businessId=ravi-stores");
+assertKeys(aaState, ["businessId", "provider", "credentialStatus", "latestConsent", "latestSession", "auditLogs", "canProceedToSandbox"], "AA state");
+assert(aaState.businessId === "ravi-stores", "AA state business id mismatch");
+assert(aaState.provider === "setu", "AA state provider mismatch");
 
 console.log("contract smoke passed");
 export const status = "passed";

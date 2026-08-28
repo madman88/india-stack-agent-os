@@ -44,13 +44,13 @@ function setuConsent(body) {
       fiTypes: ["DEPOSIT"],
       fetchType: "PERIODIC",
       purpose: {
-        refUri: "https://api.rebit.org.in/aa/purpose/101.xml",
-        code: "101",
-        text: "Loan underwriting"
+        refUri: `https://api.rebit.org.in/aa/purpose/${body.purposeCode ?? "101"}.xml`,
+        code: body.purposeCode ?? "101",
+        text: body.purposeText ?? "Loan underwriting"
       },
       vua: body.vua ?? "9999999999@setu",
       dataRange: body.dataRange,
-      consentTypes: ["TRANSACTIONS", "PROFILE", "SUMMARY"],
+      consentTypes: body.consentTypes ?? ["TRANSACTIONS", "PROFILE", "SUMMARY"],
       consentMode: "STORE"
     },
     redirectUrl: "https://india-stack-agent-os.madhusudan-prahlad.chatgpt.site",

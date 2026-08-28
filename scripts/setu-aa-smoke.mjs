@@ -70,6 +70,7 @@ try {
   assert(preflight.provider === "setu", "Setu preflight provider mismatch");
 
   const initialState = await request("/v1/rails/aa/state?businessId=ravi-stores");
+  assertExactKeys(initialState, ["businessId", "provider", "credentialStatus", "latestConsent", "latestSession", "auditLogs", "canProceedToSandbox"], "initial AA state");
   assert(initialState.provider === "setu", "AA state provider mismatch");
   assert(initialState.latestConsent === null, "AA state should start without consent");
   assert(initialState.latestSession === null, "AA state should start without session");
@@ -79,6 +80,9 @@ try {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       vua: "9999999999@setu",
+      purposeCode: "102",
+      purposeText: "invoice-backed working capital",
+      consentTypes: ["TRANSACTIONS", "SUMMARY"],
       tags: ["india-stack-agent-os", "ci"]
     })
   });
@@ -86,7 +90,9 @@ try {
   assert(consent.provider === "setu", "consent provider mismatch");
   assert(consent.status === "PENDING", "consent should start pending");
   assert(consent.url.includes("/v2/consents/webview/"), "consent redirect URL missing");
-  assert(consent.detail.purposeCode === "101", "consent purpose code mismatch");
+  assert(consent.detail.purposeCode === "102", "consent purpose code mismatch");
+  assert(consent.detail.purpose === "invoice-backed working capital", "consent purpose text mismatch");
+  assert(consent.detail.consentTypes.join(",") === "TRANSACTIONS,SUMMARY", "consent types mismatch");
 
   const status = await request(`/v1/rails/aa/consents/${consent.id}`);
   assert(status.status === "ACTIVE", "mock consent status should become active");
@@ -112,6 +118,9 @@ try {
   assert(cashflow.source.sessionId === session.id, "cashflow must identify source session");
 
   const state = await request("/v1/rails/aa/state?businessId=ravi-stores");
+  assertExactKeys(state, ["businessId", "provider", "credentialStatus", "latestConsent", "latestSession", "auditLogs", "canProceedToSandbox"], "AA state");
+  assertExactKeys(state.latestConsent, ["provider", "id", "status", "url", "redirectUrl", "traceId", "detail"], "AA state latest consent");
+  assertExactKeys(state.latestSession, ["provider", "id", "consentId", "status", "format", "dataRange", "traceId"], "AA state latest session");
   assert(state.latestConsent.id === consent.id, "AA state latest consent mismatch");
   assert(state.latestSession.id === session.id, "AA state latest session mismatch");
   assert(state.auditLogs.length === 2, "AA state audit log count mismatch");

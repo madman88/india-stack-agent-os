@@ -110,12 +110,42 @@ paths:
       responses:
         "200":
           description: Setu adapter configuration status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AaCredentialStatus"
+  /v1/rails/aa/state:
+    get:
+      summary: Get persisted AA consent, session, and audit state for a business
+      parameters:
+        - name: businessId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Current AA workflow state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AaState"
   /v1/rails/aa/consents:
     post:
       summary: Create a Setu AA consent request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AaConsentRequest"
       responses:
         "200":
           description: Pending consent and customer redirect URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AaConsent"
   /v1/rails/aa/consents/{consentId}:
     get:
       summary: Get Setu AA consent status
@@ -128,6 +158,10 @@ paths:
       responses:
         "200":
           description: Consent status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AaConsent"
   /v1/rails/aa/sessions:
     post:
       summary: Create a Setu AA financial-information data session
@@ -136,27 +170,14 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [consentId, dataRange]
-              properties:
-                consentId:
-                  type: string
-                dataRange:
-                  type: object
-                  required: [from, to]
-                  properties:
-                    from:
-                      type: string
-                      format: date-time
-                    to:
-                      type: string
-                      format: date-time
-                format:
-                  type: string
-                  enum: [json]
+              $ref: "#/components/schemas/AaSessionRequest"
       responses:
         "200":
           description: Data session status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AaDataSession"
   /v1/rails/aa/sessions/{sessionId}:
     get:
       summary: Fetch a Setu AA data session when it is ready
@@ -169,6 +190,10 @@ paths:
       responses:
         "200":
           description: Normalized data session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AaDataSession"
   /v1/rails/aa/sessions/{sessionId}/cashflow:
     get:
       summary: Normalize an eligible Setu AA data session into cashflow evidence
@@ -181,12 +206,20 @@ paths:
       responses:
         "200":
           description: Cashflow attestation generated from consented financial information
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AaCashflowAttestation"
   /v1/rails/aa/callback:
     post:
       summary: Receive a Setu AA consent or FI-data notification
       responses:
         "200":
           description: Normalized notification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AaNotification"
   /v1/proof-chain:
     get:
       summary: Proof chain events
@@ -235,6 +268,258 @@ components:
           enum: [verified, pending, simulated]
         detail:
           type: string
+    AaDateRange:
+      type: object
+      required: [from, to]
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+    AaCredentialStatus:
+      type: object
+      required: [provider, mode, baseUrl, missing]
+      properties:
+        provider:
+          type: string
+          enum: [setu]
+        mode:
+          type: string
+        baseUrl:
+          type: string
+        missing:
+          type: array
+          items:
+            type: string
+    AaConsentRequest:
+      type: object
+      required: [businessId, vua, dataRange]
+      properties:
+        businessId:
+          type: string
+        customerName:
+          type: string
+        customerMobile:
+          type: string
+        vua:
+          type: string
+        purposeCode:
+          type: string
+        purposeText:
+          type: string
+        dataRange:
+          $ref: "#/components/schemas/AaDateRange"
+        consentTypes:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+    AaConsent:
+      type: object
+      required: [provider, id, status, url, redirectUrl, traceId, detail]
+      properties:
+        provider:
+          type: string
+          enum: [setu]
+        id:
+          type: string
+        status:
+          type: string
+        url:
+          type: string
+        redirectUrl:
+          type: string
+        traceId:
+          type: [string, "null"]
+        detail:
+          type: object
+          required: [vua, purpose, purposeCode, fiTypes, dataRange, consentTypes]
+          properties:
+            vua:
+              type: [string, "null"]
+            purpose:
+              type: [string, "null"]
+            purposeCode:
+              type: [string, "null"]
+            fiTypes:
+              type: array
+              items:
+                type: string
+            dataRange:
+              anyOf:
+                - $ref: "#/components/schemas/AaDateRange"
+                - type: "null"
+            consentTypes:
+              type: array
+              items:
+                type: string
+    AaSessionRequest:
+      type: object
+      required: [businessId, consentId, dataRange]
+      properties:
+        businessId:
+          type: string
+        consentId:
+          type: string
+        dataRange:
+          $ref: "#/components/schemas/AaDateRange"
+        format:
+          type: string
+          enum: [json]
+    AaDataSession:
+      type: object
+      required: [provider, id, consentId, status, format, dataRange, traceId, fips]
+      properties:
+        provider:
+          type: string
+          enum: [setu]
+        id:
+          type: string
+        consentId:
+          type: [string, "null"]
+        status:
+          type: string
+        format:
+          type: string
+        dataRange:
+          anyOf:
+            - $ref: "#/components/schemas/AaDateRange"
+            - type: "null"
+        traceId:
+          type: [string, "null"]
+        fips:
+          type: array
+          items:
+            type: object
+    AaAuditLog:
+      type: object
+      required: [rail, action, consentId, sessionId, status, eventType, traceId, createdAt]
+      properties:
+        rail:
+          type: string
+          enum: [AA]
+        action:
+          type: string
+        consentId:
+          type: [string, "null"]
+        sessionId:
+          type: [string, "null"]
+        status:
+          type: [string, "null"]
+        eventType:
+          type: [string, "null"]
+        traceId:
+          type: [string, "null"]
+        createdAt:
+          type: string
+          format: date-time
+    AaState:
+      type: object
+      required: [businessId, provider, credentialStatus, latestConsent, latestSession, auditLogs, canProceedToSandbox]
+      properties:
+        businessId:
+          type: string
+        provider:
+          type: string
+          enum: [setu]
+        credentialStatus:
+          $ref: "#/components/schemas/AaCredentialStatus"
+        latestConsent:
+          anyOf:
+            - $ref: "#/components/schemas/AaConsent"
+            - type: "null"
+        latestSession:
+          anyOf:
+            - type: object
+              required: [provider, id, consentId, status, format, dataRange, traceId]
+              properties:
+                provider:
+                  type: string
+                  enum: [setu]
+                id:
+                  type: string
+                consentId:
+                  type: [string, "null"]
+                status:
+                  type: string
+                format:
+                  type: string
+                dataRange:
+                  anyOf:
+                    - $ref: "#/components/schemas/AaDateRange"
+                    - type: "null"
+                traceId:
+                  type: [string, "null"]
+            - type: "null"
+        auditLogs:
+          type: array
+          items:
+            $ref: "#/components/schemas/AaAuditLog"
+        canProceedToSandbox:
+          type: boolean
+    AaCashflowAttestation:
+      type: object
+      required: [rail, inflow90d, averageDailyBalance, volatility, consent, source]
+      properties:
+        rail:
+          type: string
+          enum: [AA]
+        inflow90d:
+          type: number
+        averageDailyBalance:
+          type: number
+        volatility:
+          type: string
+        consent:
+          type: object
+          required: [id, purpose, expiresInDays, status]
+          properties:
+            id:
+              type: [string, "null"]
+            purpose:
+              type: string
+            expiresInDays:
+              type: [integer, "null"]
+            status:
+              type: string
+        source:
+          type: object
+          required: [provider, sessionId, status, traceId]
+          properties:
+            provider:
+              type: string
+              enum: [setu]
+            sessionId:
+              type: string
+            status:
+              type: string
+            traceId:
+              type: [string, "null"]
+    AaNotification:
+      type: object
+      required: [provider, eventType, consentId, status, traceId, receivedAt, raw]
+      properties:
+        provider:
+          type: string
+          enum: [setu]
+        eventType:
+          type: string
+        consentId:
+          type: [string, "null"]
+        status:
+          type: [string, "null"]
+        traceId:
+          type: [string, "null"]
+        receivedAt:
+          type: string
+          format: date-time
+        raw:
+          type: object
     BusinessSnapshot:
       type: object
       required:

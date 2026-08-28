@@ -13,6 +13,7 @@
     "build": "tsc -b && vite build && node scripts/prepare-sites-build.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "sandbox:aa:check": "node scripts/aa-sandbox-preflight.mjs",
+    "test:aa-math": "node scripts/aa-cashflow-math-smoke.mjs",
     "test:adapters": "node scripts/adapter-contract-smoke.mjs",
     "test:components": "vitest run --environment jsdom",
     "test:contracts": "node scripts/contract-smoke.mjs",
@@ -23,7 +24,7 @@
     "test:rails-http": "API_BASE_URL=http://localhost:9791 node scripts/rail-http-smoke.mjs",
     "test:setu-aa": "node scripts/setu-aa-smoke.mjs",
     "test:sites-worker": "node scripts/sites-worker-smoke.mjs",
-    "test": "npm run test:fixtures && npm run test:adapters && npm run test:integration && npm run test:rails-http && npm run test:setu-aa && npm run test:components && npm run build && npm run test:sites-worker"
+    "test": "npm run test:fixtures && npm run test:adapters && npm run test:aa-math && npm run test:integration && npm run test:rails-http && npm run test:setu-aa && npm run test:components && npm run build && npm run test:sites-worker"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.953.0",

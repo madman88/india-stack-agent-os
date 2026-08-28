@@ -159,16 +159,53 @@ async function buildAaState(requestedBusinessId) {
     repositories.listAaAuditLogs(requestedBusinessId)
   ]);
 
-  const latestConsent = consents[0] ?? null;
-  const latestSession = sessions[0] ?? null;
+  const latestConsent = consents[0] ? normalizeAaStateConsent(consents[0]) : null;
+  const latestSession = sessions[0] ? normalizeAaStateSession(sessions[0]) : null;
   return {
     businessId: requestedBusinessId,
     provider: "setu",
     credentialStatus: setuAaCredentialStatus(),
     latestConsent,
     latestSession,
-    auditLogs,
+    auditLogs: auditLogs.map(normalizeAaAuditLog),
     canProceedToSandbox: Boolean(latestConsent?.id) && Boolean(latestSession?.id)
+  };
+}
+
+function normalizeAaStateConsent(consent) {
+  return {
+    provider: consent.provider,
+    id: consent.id,
+    status: consent.status,
+    url: consent.url,
+    redirectUrl: consent.redirectUrl,
+    traceId: consent.traceId ?? null,
+    detail: consent.detail
+  };
+}
+
+function normalizeAaStateSession(session) {
+  return {
+    provider: session.provider,
+    id: session.id,
+    consentId: session.consentId ?? null,
+    status: session.status,
+    format: session.format ?? "json",
+    dataRange: session.dataRange ?? null,
+    traceId: session.traceId ?? null
+  };
+}
+
+function normalizeAaAuditLog(entry) {
+  return {
+    rail: entry.rail,
+    action: entry.action,
+    consentId: entry.consentId ?? null,
+    sessionId: entry.sessionId ?? null,
+    status: entry.status ?? null,
+    eventType: entry.eventType ?? null,
+    traceId: entry.traceId ?? null,
+    createdAt: entry.createdAt
   };
 }
 

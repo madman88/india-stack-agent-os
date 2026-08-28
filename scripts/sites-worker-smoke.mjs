@@ -6,6 +6,15 @@ function assert(condition, message) {
   }
 }
 
+function assertExactKeys(value, keys, label) {
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  assert(
+    actual.length === expected.length && actual.every((key, index) => key === expected[index]),
+    `${label} keys mismatch: expected ${expected.join(", ")} got ${actual.join(", ")}`
+  );
+}
+
 const root = await mod.default.fetch(new Request("https://example.test/"));
 assert(root.status === 200, `root returned ${root.status}`);
 
@@ -43,14 +52,22 @@ const consent = await mod.default.fetch(
   new Request("https://example.test/v1/rails/aa/consents", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ vua: "9999999999@setu" })
+    body: JSON.stringify({
+      businessId: "ravi-stores",
+      vua: "9999999999@setu",
+      purposeCode: "102",
+      purposeText: "invoice-backed working capital",
+      consentTypes: ["TRANSACTIONS", "SUMMARY"]
+    })
   })
 );
 assert(consent.status === 200, `Setu consent returned ${consent.status}`);
 const consentBody = await consent.json();
 assert(consentBody.provider === "setu", "Setu consent provider mismatch");
 assert(consentBody.status === "PENDING", "Setu consent status mismatch");
-assert(consentBody.detail.consentTypes.length === 3, "Setu consent consentTypes mismatch");
+assert(consentBody.detail.purposeCode === "102", "Setu consent purpose code mismatch");
+assert(consentBody.detail.purpose === "invoice-backed working capital", "Setu consent purpose text mismatch");
+assert(consentBody.detail.consentTypes.join(",") === "TRANSACTIONS,SUMMARY", "Setu consent consentTypes mismatch");
 
 const consentStatus = await mod.default.fetch(new Request(`https://example.test/v1/rails/aa/consents/${consentBody.id}`));
 const consentStatusBody = await consentStatus.json();
@@ -84,6 +101,9 @@ assert(cashflowBody.averageDailyBalance === 62000, "Setu cashflow balance mismat
 const aaState = await mod.default.fetch(new Request("https://example.test/v1/rails/aa/state?businessId=ravi-stores"));
 assert(aaState.status === 200, `Setu AA state returned ${aaState.status}`);
 const aaStateBody = await aaState.json();
+assertExactKeys(aaStateBody, ["businessId", "provider", "credentialStatus", "latestConsent", "latestSession", "auditLogs", "canProceedToSandbox"], "Setu AA state");
+assertExactKeys(aaStateBody.latestConsent, ["provider", "id", "status", "url", "redirectUrl", "traceId", "detail"], "Setu AA state latest consent");
+assertExactKeys(aaStateBody.latestSession, ["provider", "id", "consentId", "status", "format", "dataRange", "traceId"], "Setu AA state latest session");
 assert(aaStateBody.latestConsent.id === consentBody.id, "Setu AA state latest consent mismatch");
 assert(aaStateBody.latestSession.id === sessionBody.id, "Setu AA state latest session mismatch");
 assert(aaStateBody.auditLogs.length === 2, "Setu AA state audit log mismatch");

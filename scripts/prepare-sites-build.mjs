@@ -126,11 +126,11 @@ function setuConsent(body = {}) {
     traceId: "trace-setu-sites-001",
     detail: {
       vua: body.vua ?? "9999999999@setu",
-      purpose: "Loan underwriting",
-      purposeCode: "101",
+      purpose: body.purposeText ?? "Loan underwriting",
+      purposeCode: body.purposeCode ?? "101",
       fiTypes: ["DEPOSIT"],
       dataRange: body.dataRange ?? null,
-      consentTypes: ["TRANSACTIONS", "PROFILE", "SUMMARY"]
+      consentTypes: body.consentTypes ?? ["TRANSACTIONS", "PROFILE", "SUMMARY"]
     }
   };
 }
@@ -182,12 +182,57 @@ function setuNotification(body = {}) {
   };
 }
 
+function collectAccounts(fips) {
+  return (Array.isArray(fips) ? fips : []).flatMap((fip) => Array.isArray(fip.accounts) ? fip.accounts : []);
+}
+
+function collectTransactions(value) {
+  if (!value || typeof value !== "object") return [];
+  if (Array.isArray(value)) return value.flatMap(collectTransactions);
+  const transactions = value.transactions?.transaction ?? value.transactions?.transactions ?? value.transactions;
+  if (Array.isArray(transactions)) return transactions;
+  if (Array.isArray(value.transaction)) return value.transaction;
+  return [];
+}
+
+function transactionAmount(transaction) {
+  const amount = Number(transaction.amount ?? transaction.transactionAmount ?? transaction.depositAmount ?? 0);
+  return Number.isFinite(amount) ? Math.abs(amount) : 0;
+}
+
+function isCredit(transaction) {
+  const type = String(transaction.transactionType ?? transaction.type ?? transaction.mode ?? "").toUpperCase();
+  if (type) return ["CREDIT", "CR", "DEPOSIT", "INFLOW"].includes(type);
+  return Number(transaction.amount) > 0;
+}
+
+function accountBalance(account) {
+  const summary = account.data?.summary ?? account.decryptedFI?.summary ?? account.summary ?? {};
+  const balance = Number(summary.currentBalance ?? summary.balance ?? summary.availableBalance);
+  return Number.isFinite(balance) ? balance : Number.NaN;
+}
+
+function calculateVolatility(transactions) {
+  const amounts = transactions.map(transactionAmount).filter((amount) => amount > 0);
+  if (amounts.length < 3) return "unknown";
+  const mean = amounts.reduce((sum, amount) => sum + amount, 0) / amounts.length;
+  const variance = amounts.reduce((sum, amount) => sum + (amount - mean) ** 2, 0) / amounts.length;
+  const coefficientOfVariation = Math.sqrt(variance) / mean;
+  if (coefficientOfVariation < 0.35) return "low";
+  if (coefficientOfVariation < 0.8) return "moderate";
+  return "high";
+}
+
 function setuCashflow(session) {
+  const accounts = collectAccounts(session.fips);
+  const transactions = accounts.flatMap((account) => collectTransactions(account.data ?? account.decryptedFI ?? account));
+  const credits = transactions.filter((transaction) => isCredit(transaction));
+  const balances = accounts.map(accountBalance).filter(Number.isFinite);
   return {
     rail: "AA",
-    inflow90d: 480000,
-    averageDailyBalance: 62000,
-    volatility: "moderate",
+    inflow90d: credits.reduce((sum, transaction) => sum + transactionAmount(transaction), 0),
+    averageDailyBalance: balances.length ? balances.reduce((sum, value) => sum + value, 0) / balances.length : 0,
+    volatility: calculateVolatility(transactions),
     consent: {
       id: session.consentId,
       purpose: "working-capital-affordability",
@@ -225,10 +270,47 @@ function aaState(requestedBusinessId) {
       baseUrl: "https://fiu-sandbox.setu.co",
       missing: ["AA_ACCESS_TOKEN", "AA_PRODUCT_INSTANCE_ID"]
     },
-    latestConsent: consents[0] ?? null,
-    latestSession: sessions[0] ?? null,
-    auditLogs: aaAuditLogs.filter((item) => item.businessId === requestedBusinessId),
+    latestConsent: consents[0] ? publicConsent(consents[0]) : null,
+    latestSession: sessions[0] ? publicSession(sessions[0]) : null,
+    auditLogs: aaAuditLogs.filter((item) => item.businessId === requestedBusinessId).map(publicAuditLog),
     canProceedToSandbox: Boolean(consents[0]?.id) && Boolean(sessions[0]?.id)
+  };
+}
+
+function publicConsent(consent) {
+  return {
+    provider: consent.provider,
+    id: consent.id,
+    status: consent.status,
+    url: consent.url,
+    redirectUrl: consent.redirectUrl,
+    traceId: consent.traceId ?? null,
+    detail: consent.detail
+  };
+}
+
+function publicSession(session) {
+  return {
+    provider: session.provider,
+    id: session.id,
+    consentId: session.consentId ?? null,
+    status: session.status,
+    format: session.format ?? "json",
+    dataRange: session.dataRange ?? null,
+    traceId: session.traceId ?? null
+  };
+}
+
+function publicAuditLog(entry) {
+  return {
+    rail: entry.rail,
+    action: entry.action,
+    consentId: entry.consentId ?? null,
+    sessionId: entry.sessionId ?? null,
+    status: entry.status ?? null,
+    eventType: entry.eventType ?? null,
+    traceId: entry.traceId ?? null,
+    createdAt: entry.createdAt
   };
 }
 

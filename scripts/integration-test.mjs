@@ -36,6 +36,15 @@ function assert(condition, message) {
   }
 }
 
+function assertExactKeys(value, keys, label) {
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  assert(
+    actual.length === expected.length && actual.every((key, index) => key === expected[index]),
+    `${label} keys mismatch: expected ${expected.join(", ")} got ${actual.join(", ")}`
+  );
+}
+
 const child = spawn(process.execPath, ["services/mock-api/server.mjs"], {
   env: { ...process.env, PORT: String(port) },
   stdio: ["ignore", "pipe", "pipe"]
@@ -57,6 +66,7 @@ try {
   }
 
   const initialAaState = await request("/v1/rails/aa/state?businessId=ravi-stores");
+  assertExactKeys(initialAaState, ["businessId", "provider", "credentialStatus", "latestConsent", "latestSession", "auditLogs", "canProceedToSandbox"], "initial AA state");
   assert(initialAaState.businessId === "ravi-stores", "AA state business id mismatch");
   assert(initialAaState.provider === "setu", "AA state provider mismatch");
   assert(initialAaState.latestConsent === null, "AA state should start without consent");
@@ -68,13 +78,17 @@ try {
     body: JSON.stringify({
       businessId: "ravi-stores",
       vua: "9999999999@setu",
+      purposeCode: "102",
+      purposeText: "invoice-backed working capital",
       dataRange: { from: "2026-01-01T00:00:00.000Z", to: "2026-03-31T23:59:59.999Z" },
-      consentTypes: ["TRANSACTIONS", "SUMMARY", "PROFILE"]
+      consentTypes: ["TRANSACTIONS", "SUMMARY"]
     })
   });
   assert(consent.provider === "setu", "AA consent provider mismatch");
   assert(consent.status === "PENDING", "AA consent status mismatch");
-  assert(consent.detail.consentTypes.length === 3, "AA consent types mismatch");
+  assert(consent.detail.purposeCode === "102", "AA consent purpose code mismatch");
+  assert(consent.detail.purpose === "invoice-backed working capital", "AA consent purpose text mismatch");
+  assert(consent.detail.consentTypes.join(",") === "TRANSACTIONS,SUMMARY", "AA consent types mismatch");
 
   const session = await request("/v1/rails/aa/sessions", {
     method: "POST",
@@ -96,6 +110,9 @@ try {
   assert(cashflow.averageDailyBalance === 62000, "AA cashflow balance math mismatch");
 
   const updatedAaState = await request("/v1/rails/aa/state?businessId=ravi-stores");
+  assertExactKeys(updatedAaState, ["businessId", "provider", "credentialStatus", "latestConsent", "latestSession", "auditLogs", "canProceedToSandbox"], "updated AA state");
+  assertExactKeys(updatedAaState.latestConsent, ["provider", "id", "status", "url", "redirectUrl", "traceId", "detail"], "updated AA state latest consent");
+  assertExactKeys(updatedAaState.latestSession, ["provider", "id", "consentId", "status", "format", "dataRange", "traceId"], "updated AA state latest session");
   assert(updatedAaState.latestConsent.id === consent.id, "AA state latest consent mismatch");
   assert(updatedAaState.latestSession.id === session.id, "AA state latest session mismatch");
   assert(updatedAaState.auditLogs.length === 2, "AA audit log should include consent and session events");

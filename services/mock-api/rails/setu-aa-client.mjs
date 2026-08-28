@@ -225,6 +225,9 @@ function buildConsentPayload(input) {
       to: input.dataRange?.to ?? now.toISOString()
     },
     context: input.context ?? [],
+    purposeCode: input.purposeCode ?? "101",
+    purposeText: input.purposeText ?? "working capital affordability",
+    consentTypes: input.consentTypes ?? ["TRANSACTIONS", "SUMMARY", "PROFILE"],
     additionalParams: {
       tags: input.tags ?? ["india-stack-agent-os", "working-capital"]
     }
