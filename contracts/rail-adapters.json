@@ -48,6 +48,22 @@
           "requiresConsentRef": true,
           "irreversible": false,
           "normalizedShape": ["provider", "id", "status", "url", "redirectUrl", "traceId", "detail"]
+        },
+        "createSetuDataSession": {
+          "method": "POST",
+          "path": "/v2/sessions",
+          "authMode": "setu-bearer-product-instance",
+          "requiresConsentRef": true,
+          "irreversible": false,
+          "normalizedShape": ["provider", "id", "consentId", "status", "format", "dataRange", "traceId", "fips"]
+        },
+        "getSetuDataSession": {
+          "method": "GET",
+          "path": "/v2/sessions/:id",
+          "authMode": "setu-bearer-product-instance",
+          "requiresConsentRef": true,
+          "irreversible": false,
+          "normalizedShape": ["provider", "id", "consentId", "status", "format", "dataRange", "traceId", "fips"]
         }
       }
     },

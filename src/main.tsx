@@ -358,7 +358,7 @@ function toIsoValue(localValue: string) {
   return new Date(localValue).toISOString();
 }
 
-function App() {
+export function App() {
   const [view, setView] = useState<View>("owner");
   const [actionState, setActionState] = useState<ActionState>("pending");
   const [scenario, setScenario] = useState<Scenario>(fallbackScenario);
@@ -625,7 +625,7 @@ function App() {
   }
 
   async function createAaSession() {
-    const selectedRecord = aaConsents.find((record) => record.recordId === aaSelectedConsentId);
+    const selectedRecord = aaConsents.find((record) => record.recordId === aaSelectedConsentId || record.consentId === aaSelectedConsentId);
     const consentId = selectedRecord?.consentId ?? aaState?.latestConsent?.id;
     if (!consentId) return;
     setAaBusy("creating-session");
@@ -1090,8 +1090,8 @@ function OwnerConsole({
               {aaConsents.length ? aaConsents.map((record) => (
                 <button
                   key={`${record.createdAt}-${record.consentId ?? record.customerName}`}
-                  className={record.consentId === aaSelectedConsentId ? "aa-list-row selected" : "aa-list-row"}
-                  onClick={() => record.consentId && setAaSelectedConsentId(record.consentId)}
+                  className={record.recordId === aaSelectedConsentId ? "aa-list-row selected" : "aa-list-row"}
+                  onClick={() => setAaSelectedConsentId(record.recordId)}
                 >
                   <div>
                     <strong>{record.customerName}</strong>
@@ -1605,7 +1605,10 @@ function ControlItem({ label, status }: { label: string; status: string }) {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+const rootElement = document.getElementById("root");
+if (rootElement) {
+  createRoot(rootElement).render(<App />);
+}
 
 function apiFetch(path: string, init?: RequestInit) {
   const apiOrigin = (import.meta as unknown as { env?: { VITE_API_ORIGIN?: string } }).env?.VITE_API_ORIGIN ?? "http://localhost:8787";

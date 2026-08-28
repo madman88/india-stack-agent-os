@@ -92,6 +92,69 @@ resource "aws_dynamodb_table" "event_ledger" {
   }
 }
 
+resource "aws_dynamodb_table" "aa_consents" {
+  name         = "agent-os-aa-consents"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "business_id"
+  range_key    = "consent_id"
+
+  attribute {
+    name = "business_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "consent_id"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "consent-id-index"
+    hash_key        = "consent_id"
+    projection_type = "ALL"
+  }
+}
+
+resource "aws_dynamodb_table" "aa_sessions" {
+  name         = "agent-os-aa-sessions"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "business_id"
+  range_key    = "session_id"
+
+  attribute {
+    name = "business_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "session_id"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "session-id-index"
+    hash_key        = "session_id"
+    projection_type = "ALL"
+  }
+}
+
+resource "aws_dynamodb_table" "aa_audit_log" {
+  name         = "agent-os-aa-audit-log"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "business_id"
+  range_key    = "entry_id"
+
+  attribute {
+    name = "business_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "entry_id"
+    type = "S"
+  }
+}
+
 resource "aws_secretsmanager_secret" "rail_adapter_config" {
   name = "agent-os/rail-adapters/mock"
 }
@@ -131,4 +194,16 @@ output "approvals_table" {
 
 output "event_ledger_table" {
   value = aws_dynamodb_table.event_ledger.name
+}
+
+output "aa_consent_table" {
+  value = aws_dynamodb_table.aa_consents.name
+}
+
+output "aa_session_table" {
+  value = aws_dynamodb_table.aa_sessions.name
+}
+
+output "aa_audit_log_table" {
+  value = aws_dynamodb_table.aa_audit_log.name
 }

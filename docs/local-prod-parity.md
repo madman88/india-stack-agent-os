@@ -27,6 +27,7 @@ LocalStack resources live in `infra/terraform/localstack`:
 - DynamoDB table for business snapshots.
 - DynamoDB table for approval decisions.
 - DynamoDB table for processed event IDs.
+- DynamoDB tables for AA consents, AA sessions, and AA audit logs.
 - Secrets Manager secret for adapter endpoint config.
 
 Run:

@@ -135,6 +135,41 @@ function setuConsent(body = {}) {
   };
 }
 
+function setuDataSession(body = {}) {
+  const id = body.id ?? "setu-session-ravi-001";
+  return {
+    provider: "setu",
+    id,
+    consentId: body.consentId ?? "setu-consent-ravi-001",
+    status: body.status ?? "COMPLETED",
+    format: body.format ?? "json",
+    dataRange: body.dataRange ?? null,
+    traceId: "trace-setu-sites-session-001",
+    fips: [
+      {
+        fipID: "Setu-FIP",
+        accounts: [
+          {
+            maskedAccNumber: "XXXXXX4373",
+            FIstatus: "READY",
+            data: {
+              summary: { currentBalance: "62000" },
+              transactions: {
+                transaction: [
+                  { transactionType: "CREDIT", amount: "180000" },
+                  { transactionType: "CREDIT", amount: "155000" },
+                  { transactionType: "CREDIT", amount: "145000" },
+                  { transactionType: "DEBIT", amount: "93000" }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  };
+}
+
 function setuNotification(body = {}) {
   return {
     provider: "setu",
@@ -144,6 +179,56 @@ function setuNotification(body = {}) {
     traceId: body.traceId ?? null,
     receivedAt: new Date().toISOString(),
     raw: body
+  };
+}
+
+function setuCashflow(session) {
+  return {
+    rail: "AA",
+    inflow90d: 480000,
+    averageDailyBalance: 62000,
+    volatility: "moderate",
+    consent: {
+      id: session.consentId,
+      purpose: "working-capital-affordability",
+      expiresInDays: null,
+      status: "purpose-bound"
+    },
+    source: {
+      provider: "setu",
+      sessionId: session.id,
+      status: session.status,
+      traceId: session.traceId
+    }
+  };
+}
+
+const aaConsents = [];
+const aaSessions = [];
+const aaAuditLogs = [];
+
+function appendAaAudit(entry) {
+  const item = { ...entry, createdAt: new Date().toISOString() };
+  aaAuditLogs.unshift(item);
+  return item;
+}
+
+function aaState(requestedBusinessId) {
+  const consents = aaConsents.filter((item) => item.businessId === requestedBusinessId);
+  const sessions = aaSessions.filter((item) => item.businessId === requestedBusinessId);
+  return {
+    businessId: requestedBusinessId,
+    provider: "setu",
+    credentialStatus: {
+      provider: "setu",
+      mode: "sites-demo",
+      baseUrl: "https://fiu-sandbox.setu.co",
+      missing: ["AA_ACCESS_TOKEN", "AA_PRODUCT_INSTANCE_ID"]
+    },
+    latestConsent: consents[0] ?? null,
+    latestSession: sessions[0] ?? null,
+    auditLogs: aaAuditLogs.filter((item) => item.businessId === requestedBusinessId),
+    canProceedToSandbox: Boolean(consents[0]?.id) && Boolean(sessions[0]?.id)
   };
 }
 
@@ -166,16 +251,70 @@ async function handleApi(request, url) {
   }
 
   if (request.method === "POST" && url.pathname === "/v1/rails/aa/consents") {
-    return json(setuConsent(await request.json()));
+    const body = await request.json();
+    const consent = setuConsent(body);
+    const storedConsent = { ...consent, businessId: body.businessId ?? businessId };
+    aaConsents.unshift(storedConsent);
+    appendAaAudit({
+      businessId: storedConsent.businessId,
+      rail: "AA",
+      action: "consent.created",
+      consentId: consent.id,
+      status: consent.status,
+      traceId: consent.traceId
+    });
+    return json(consent);
   }
 
   const aaConsentMatch = url.pathname.match(/^\\/v1\\/rails\\/aa\\/consents\\/([^/]+)$/);
   if (request.method === "GET" && aaConsentMatch) {
-    return json(setuConsent({ id: aaConsentMatch[1], status: "ACTIVE" }));
+    return json(aaConsents.find((item) => item.id === aaConsentMatch[1]) ?? setuConsent({ id: aaConsentMatch[1], status: "ACTIVE" }));
+  }
+
+  if (request.method === "GET" && url.pathname === "/v1/rails/aa/state") {
+    return json(aaState(url.searchParams.get("businessId") ?? businessId));
+  }
+
+  if (request.method === "POST" && url.pathname === "/v1/rails/aa/sessions") {
+    const body = await request.json();
+    const session = setuDataSession(body);
+    const storedSession = { ...session, businessId: body.businessId ?? businessId };
+    aaSessions.unshift(storedSession);
+    appendAaAudit({
+      businessId: storedSession.businessId,
+      rail: "AA",
+      action: "session.created",
+      consentId: session.consentId,
+      sessionId: session.id,
+      status: session.status,
+      traceId: session.traceId
+    });
+    return json(session);
+  }
+
+  const aaSessionCashflowMatch = url.pathname.match(/^\\/v1\\/rails\\/aa\\/sessions\\/([^/]+)\\/cashflow$/);
+  if (request.method === "GET" && aaSessionCashflowMatch) {
+    const session = aaSessions.find((item) => item.id === aaSessionCashflowMatch[1]) ?? setuDataSession({ id: aaSessionCashflowMatch[1] });
+    return json(setuCashflow(session));
+  }
+
+  const aaSessionMatch = url.pathname.match(/^\\/v1\\/rails\\/aa\\/sessions\\/([^/]+)$/);
+  if (request.method === "GET" && aaSessionMatch) {
+    return json(aaSessions.find((item) => item.id === aaSessionMatch[1]) ?? setuDataSession({ id: aaSessionMatch[1] }));
   }
 
   if (request.method === "POST" && url.pathname === "/v1/rails/aa/callback") {
-    return json(setuNotification(await request.json()));
+    const notification = setuNotification(await request.json());
+    appendAaAudit({
+      businessId,
+      rail: "AA",
+      action: "callback.received",
+      consentId: notification.consentId,
+      status: notification.status,
+      eventType: notification.eventType,
+      traceId: notification.traceId
+    });
+    return json(notification);
   }
 
   if (request.method === "GET" && url.pathname === "/v1/businesses/" + businessId + "/snapshot") {

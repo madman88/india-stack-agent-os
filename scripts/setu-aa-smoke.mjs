@@ -11,6 +11,15 @@ function assert(condition, message) {
   }
 }
 
+function assertExactKeys(value, keys, label) {
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  assert(
+    actual.length === expected.length && actual.every((key, index) => key === expected[index]),
+    `${label} keys mismatch: expected ${expected.join(", ")} got ${actual.join(", ")}`
+  );
+}
+
 function start(name, args, env) {
   const child = spawn(process.execPath, args, {
     env: { ...process.env, ...env },
@@ -60,6 +69,11 @@ try {
   const preflight = await request("/v1/rails/aa/setu/preflight");
   assert(preflight.provider === "setu", "Setu preflight provider mismatch");
 
+  const initialState = await request("/v1/rails/aa/state?businessId=ravi-stores");
+  assert(initialState.provider === "setu", "AA state provider mismatch");
+  assert(initialState.latestConsent === null, "AA state should start without consent");
+  assert(initialState.latestSession === null, "AA state should start without session");
+
   const consent = await request("/v1/rails/aa/consents", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -68,6 +82,7 @@ try {
       tags: ["india-stack-agent-os", "ci"]
     })
   });
+  assertExactKeys(consent, ["provider", "id", "status", "url", "redirectUrl", "traceId", "detail"], "Setu consent");
   assert(consent.provider === "setu", "consent provider mismatch");
   assert(consent.status === "PENDING", "consent should start pending");
   assert(consent.url.includes("/v2/consents/webview/"), "consent redirect URL missing");
@@ -85,14 +100,22 @@ try {
       format: "json"
     })
   });
+  assertExactKeys(session, ["provider", "id", "consentId", "status", "format", "dataRange", "traceId", "fips"], "Setu data session");
   assert(session.provider === "setu", "data-session provider mismatch");
   assert(session.status === "COMPLETED", "mock data session should be completed");
 
   const cashflow = await request(`/v1/rails/aa/sessions/${session.id}/cashflow`);
+  assertExactKeys(cashflow, ["rail", "inflow90d", "averageDailyBalance", "volatility", "consent", "source"], "Setu cashflow");
   assert(cashflow.rail === "AA", "cashflow rail mismatch");
   assert(cashflow.inflow90d === 480000, "cashflow must sum credit transactions");
   assert(cashflow.averageDailyBalance === 62000, "cashflow balance mismatch");
   assert(cashflow.source.sessionId === session.id, "cashflow must identify source session");
+
+  const state = await request("/v1/rails/aa/state?businessId=ravi-stores");
+  assert(state.latestConsent.id === consent.id, "AA state latest consent mismatch");
+  assert(state.latestSession.id === session.id, "AA state latest session mismatch");
+  assert(state.auditLogs.length === 2, "AA state audit log count mismatch");
+  assert(state.canProceedToSandbox === true, "AA state should be ready after consent and session");
 
   const callback = await request("/v1/rails/aa/callback", {
     method: "POST",

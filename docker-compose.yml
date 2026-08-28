@@ -38,6 +38,9 @@ services:
       BUSINESS_STATE_TABLE: agent-os-business-state
       APPROVALS_TABLE: agent-os-approvals
       EVENT_LEDGER_TABLE: agent-os-event-ledger
+      AA_CONSENT_TABLE: agent-os-aa-consents
+      AA_SESSION_TABLE: agent-os-aa-sessions
+      AA_AUDIT_LOG_TABLE: agent-os-aa-audit-log
       RAIL_EVENTS_QUEUE_URL: http://sqs.ap-south-1.localhost.localstack.cloud:4566/000000000000/agent-os-rail-events
       MOCK_RAILS_BASE_URL: http://mock-rails:8790
     ports:
@@ -62,6 +65,9 @@ services:
       BUSINESS_STATE_TABLE: agent-os-business-state
       APPROVALS_TABLE: agent-os-approvals
       EVENT_LEDGER_TABLE: agent-os-event-ledger
+      AA_CONSENT_TABLE: agent-os-aa-consents
+      AA_SESSION_TABLE: agent-os-aa-sessions
+      AA_AUDIT_LOG_TABLE: agent-os-aa-audit-log
       RAIL_EVENTS_QUEUE_URL: http://sqs.ap-south-1.localhost.localstack.cloud:4566/000000000000/agent-os-rail-events
     volumes:
       - .:/app

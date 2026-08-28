@@ -50,9 +50,43 @@ assert(consent.status === 200, `Setu consent returned ${consent.status}`);
 const consentBody = await consent.json();
 assert(consentBody.provider === "setu", "Setu consent provider mismatch");
 assert(consentBody.status === "PENDING", "Setu consent status mismatch");
+assert(consentBody.detail.consentTypes.length === 3, "Setu consent consentTypes mismatch");
 
 const consentStatus = await mod.default.fetch(new Request(`https://example.test/v1/rails/aa/consents/${consentBody.id}`));
 const consentStatusBody = await consentStatus.json();
-assert(consentStatusBody.status === "ACTIVE", "Setu consent status route mismatch");
+assert(consentStatusBody.id === consentBody.id, "Setu consent status route id mismatch");
+
+const session = await mod.default.fetch(
+  new Request("https://example.test/v1/rails/aa/sessions", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      businessId: "ravi-stores",
+      consentId: consentBody.id,
+      dataRange: { from: "2026-01-01T00:00:00.000Z", to: "2026-03-31T23:59:59.999Z" },
+      format: "json"
+    })
+  })
+);
+assert(session.status === 200, `Setu session returned ${session.status}`);
+const sessionBody = await session.json();
+assert(sessionBody.provider === "setu", "Setu session provider mismatch");
+assert(sessionBody.consentId === consentBody.id, "Setu session consent id mismatch");
+assert(sessionBody.status === "COMPLETED", "Setu session status mismatch");
+
+const cashflow = await mod.default.fetch(new Request(`https://example.test/v1/rails/aa/sessions/${sessionBody.id}/cashflow`));
+assert(cashflow.status === 200, `Setu cashflow returned ${cashflow.status}`);
+const cashflowBody = await cashflow.json();
+assert(cashflowBody.rail === "AA", "Setu cashflow rail mismatch");
+assert(cashflowBody.inflow90d === 480000, "Setu cashflow inflow mismatch");
+assert(cashflowBody.averageDailyBalance === 62000, "Setu cashflow balance mismatch");
+
+const aaState = await mod.default.fetch(new Request("https://example.test/v1/rails/aa/state?businessId=ravi-stores"));
+assert(aaState.status === 200, `Setu AA state returned ${aaState.status}`);
+const aaStateBody = await aaState.json();
+assert(aaStateBody.latestConsent.id === consentBody.id, "Setu AA state latest consent mismatch");
+assert(aaStateBody.latestSession.id === sessionBody.id, "Setu AA state latest session mismatch");
+assert(aaStateBody.auditLogs.length === 2, "Setu AA state audit log mismatch");
+assert(aaStateBody.canProceedToSandbox === true, "Setu AA state readiness mismatch");
 
 console.log("sites worker smoke passed");

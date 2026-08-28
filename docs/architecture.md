@@ -62,6 +62,9 @@ The service uses repository interfaces so local tests can run in memory while Do
 - `agent-os-proof-chain`: proof events keyed by `business_id` and `proof_id`.
 - `agent-os-approvals`: owner approval or rejection decisions keyed by `business_id` and `approval_id`.
 - `agent-os-event-ledger`: processed event IDs for idempotent worker execution.
+- `agent-os-aa-consents`: Setu AA consent records keyed by `business_id` and `consent_id`.
+- `agent-os-aa-sessions`: Setu AA data sessions keyed by `business_id` and `session_id`.
+- `agent-os-aa-audit-log`: AA consent, session, and callback audit entries keyed by `business_id` and `entry_id`.
 
 ## Event Bus
 

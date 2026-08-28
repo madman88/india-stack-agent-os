@@ -9,7 +9,10 @@ const defaultConfig = {
   proofChainTable: process.env.PROOF_CHAIN_TABLE ?? "agent-os-proof-chain",
   businessStateTable: process.env.BUSINESS_STATE_TABLE ?? "agent-os-business-state",
   approvalsTable: process.env.APPROVALS_TABLE ?? "agent-os-approvals",
-  eventLedgerTable: process.env.EVENT_LEDGER_TABLE ?? "agent-os-event-ledger"
+  eventLedgerTable: process.env.EVENT_LEDGER_TABLE ?? "agent-os-event-ledger",
+  aaConsentTable: process.env.AA_CONSENT_TABLE ?? "agent-os-aa-consents",
+  aaSessionTable: process.env.AA_SESSION_TABLE ?? "agent-os-aa-sessions",
+  aaAuditLogTable: process.env.AA_AUDIT_LOG_TABLE ?? "agent-os-aa-audit-log"
 };
 
 function createDocumentClient(config) {
@@ -234,12 +237,17 @@ function createDynamoRepositories(config) {
     },
     async getAaConsent(consentId) {
       const result = await doc.send(
-        new GetCommand({
+        new QueryCommand({
           TableName: config.aaConsentTable,
-          Key: { consent_id: consentId }
+          IndexName: "consent-id-index",
+          KeyConditionExpression: "consent_id = :consentId",
+          ExpressionAttributeValues: {
+            ":consentId": consentId
+          },
+          Limit: 1
         })
       );
-      return result.Item?.consent ?? null;
+      return result.Items?.[0]?.consent ?? null;
     },
     async listAaConsents(businessId) {
       const result = await doc.send(
@@ -270,12 +278,17 @@ function createDynamoRepositories(config) {
     },
     async getAaSession(sessionId) {
       const result = await doc.send(
-        new GetCommand({
+        new QueryCommand({
           TableName: config.aaSessionTable,
-          Key: { session_id: sessionId }
+          IndexName: "session-id-index",
+          KeyConditionExpression: "session_id = :sessionId",
+          ExpressionAttributeValues: {
+            ":sessionId": sessionId
+          },
+          Limit: 1
         })
       );
-      return result.Item?.session ?? null;
+      return result.Items?.[0]?.session ?? null;
     },
     async listAaSessions(businessId) {
       const result = await doc.send(
@@ -291,18 +304,19 @@ function createDynamoRepositories(config) {
       return (result.Items ?? []).map((item) => item.session);
     },
     async appendAaAuditLog(businessId, entry) {
+      const item = { ...entry, createdAt: new Date().toISOString() };
       await doc.send(
         new PutCommand({
           TableName: config.aaAuditLogTable,
           Item: {
             business_id: businessId,
             entry_id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
-            entry,
-            created_at: new Date().toISOString()
+            entry: item,
+            created_at: item.createdAt
           }
         })
       );
-      return entry;
+      return item;
     },
     async listAaAuditLogs(businessId) {
       const result = await doc.send(

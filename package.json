@@ -14,6 +14,7 @@
     "preview": "vite preview --host 0.0.0.0",
     "sandbox:aa:check": "node scripts/aa-sandbox-preflight.mjs",
     "test:adapters": "node scripts/adapter-contract-smoke.mjs",
+    "test:components": "vitest run --environment jsdom",
     "test:contracts": "node scripts/contract-smoke.mjs",
     "test:db": "node scripts/db-smoke.mjs",
     "test:events": "node scripts/event-smoke.mjs",
@@ -22,7 +23,7 @@
     "test:rails-http": "API_BASE_URL=http://localhost:9791 node scripts/rail-http-smoke.mjs",
     "test:setu-aa": "node scripts/setu-aa-smoke.mjs",
     "test:sites-worker": "node scripts/sites-worker-smoke.mjs",
-    "test": "npm run test:fixtures && npm run test:adapters && npm run test:integration && npm run test:rails-http && npm run test:setu-aa && npm run build && npm run test:sites-worker"
+    "test": "npm run test:fixtures && npm run test:adapters && npm run test:integration && npm run test:rails-http && npm run test:setu-aa && npm run test:components && npm run build && npm run test:sites-worker"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.953.0",
@@ -36,8 +37,13 @@
     "vite": "^7.3.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.6",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "jsdom": "^29.1.1",
+    "vitest": "^4.1.11"
   }
 }
