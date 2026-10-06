@@ -75,6 +75,30 @@ describe("App AA workflow", () => {
     expect(screen.queryByText("Estimate from net bank inflows.")).not.toBeInTheDocument();
   });
 
+  it("shows durable history while blocking fetches after consent expiry", async () => {
+    sessionStorage.setItem("isao.aaAccessKey", "private-key");
+    localStorage.setItem("isao.aaSessions", JSON.stringify([{ sessionId: "obsolete-browser-session", cashflowInflow90d: 999999 }]));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const path = pathOf(input);
+      if (path === "/v1/businesses/ravi-stores/snapshot") return jsonResponse(snapshot);
+      if (path === "/v1/rails/aa/state") return jsonResponse({ ...emptyAaState,
+        credentialStatus: { ...emptyAaState.credentialStatus, mode: "sandbox" },
+        latestConsent: { id: "saved-consent", status: "EXPIRED", url: "https://example.test/expired" },
+        lifecycle: { stage: "approval_required", message: "Consent is expired. A new consent approval is required.", canFetch: false, canRetry: false },
+        records: [{ id: "session:saved-session", kind: "session", consent_id: "saved-consent", status: "COMPLETED", observed_at: "2026-10-06T06:00:00Z", data_from: "2026-07-08T06:00:00Z", data_to: "2026-10-06T06:00:00Z" }],
+        auditLogs: [{ rail: "AA", action: "consent.observed", status: "EXPIRED", createdAt: "2026-10-06T06:00:00Z" }]
+      });
+      if (path === "/v1/decisions/working-capital") return jsonResponse({ mode: "aa-sandbox", recommendation: { amount: 0, status: "hold", reason: "Hold: Consent has expired.", repaymentCapDays: 45 } });
+      return jsonResponse({ error: "not_found" }, 404);
+    }));
+    render(<App />);
+    await screen.findByText("Consent is expired. A new consent approval is required.");
+    expect(screen.getByRole("button", { name: "Fetch approved statement" })).toBeDisabled();
+    expect(screen.getByText("saved-session")).toBeInTheDocument();
+    expect(screen.getByText("consent.observed")).toBeInTheDocument();
+    expect(screen.queryByText("obsolete-browser-session")).not.toBeInTheDocument();
+  });
+
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();

@@ -112,6 +112,8 @@ type Scenario = {
 };
 
 type AaState = {
+  lifecycle?: { stage: string; message: string; canFetch: boolean; canRetry: boolean };
+  records?: Array<{ id: string; kind: string; consent_id: string; status: string; observed_at: string; data_from: string | null; data_to: string | null }>;
   businessId: string;
   provider: "setu";
   credentialStatus: {
@@ -378,13 +380,13 @@ export function App() {
   const [aaStatus, setAaStatus] = useState<string | null>(null);
   const [aaDraft, setAaDraft] = useState<AaDraft>(() => loadAaDraft());
   const [aaConsents, setAaConsents] = useState<AaConsentRecord[]>(() =>
-    loadJson<AaConsentRecord[]>(aaConsentStorageKey, []).map((record) => ({
+    (privateSandbox ? [] : loadJson<AaConsentRecord[]>(aaConsentStorageKey, [])).map((record) => ({
       ...record,
       recordId: record.recordId ?? makeRecordId("consent")
     }))
   );
   const [aaSessions, setAaSessions] = useState<AaSessionRecord[]>(() =>
-    loadJson<AaSessionRecord[]>(aaSessionStorageKey, []).map((record) => ({
+    (privateSandbox ? [] : loadJson<AaSessionRecord[]>(aaSessionStorageKey, [])).map((record) => ({
       ...record,
       recordId: record.recordId ?? makeRecordId("session")
     }))
@@ -434,15 +436,15 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(aaDraftStorageKey, JSON.stringify(aaDraft));
+    if (!privateSandbox) localStorage.setItem(aaDraftStorageKey, JSON.stringify(aaDraft));
   }, [aaDraft]);
 
   useEffect(() => {
-    localStorage.setItem(aaConsentStorageKey, JSON.stringify(aaConsents));
+    if (!privateSandbox) localStorage.setItem(aaConsentStorageKey, JSON.stringify(aaConsents));
   }, [aaConsents]);
 
   useEffect(() => {
-    localStorage.setItem(aaSessionStorageKey, JSON.stringify(aaSessions));
+    if (!privateSandbox) localStorage.setItem(aaSessionStorageKey, JSON.stringify(aaSessions));
   }, [aaSessions]);
 
   useEffect(() => {
@@ -618,12 +620,25 @@ export function App() {
       }, ...current.filter((item) => item.sessionId !== session.id)].slice(0, 20));
     }
     } catch {
+      if (privateSandbox) setAaState(null);
       setAaStatus("Could not refresh sandbox state. Check your access key and retry.");
     }
     if (privateSandbox) await refreshDecision();
   }
 
   function adoptSandboxConsent(state: AaState) {
+    if (state.credentialStatus.mode === "sandbox" && state.records) {
+      setAaConsents(state.records.filter((r) => r.kind === "consent").map((r) => ({
+        recordId: r.id, businessId: "ravi-stores", customerName: "Sandbox test account", customerMobile: "", vua: "",
+        purposeCode: "105", purposeText: "Saved consent reference", dataFrom: r.data_from ?? "", dataTo: r.data_to ?? "",
+        consentTypes: [], createdAt: r.observed_at, consentId: r.id.slice("consent:".length), status: r.status
+      })));
+      setAaSessions(state.records.filter((r) => r.kind === "session").map((r) => ({
+        recordId: r.id, businessId: "ravi-stores", consentId: r.consent_id, sessionId: r.id.slice("session:".length),
+        createdAt: r.observed_at, dataFrom: r.data_from ?? "", dataTo: r.data_to ?? "", status: r.status,
+        cashflowInflow90d: null, averageDailyBalance: null
+      })));
+    }
     if (state.credentialStatus.mode !== "sandbox" || !state.latestConsent) return;
     setAaSelectedConsentId(state.latestConsent.id);
     const detail = state.latestConsent.detail;
@@ -642,7 +657,6 @@ export function App() {
   async function createAaConsent() {
     if (privateSandbox) {
       await refreshAaState();
-      setAaStatus("Using your existing Setu sandbox consent.");
       return;
     }
     setAaBusy("creating-consent");
@@ -718,6 +732,7 @@ export function App() {
         body: JSON.stringify({
           businessId: scenario.business.id,
           consentId,
+          ...(privateSandbox && aaState?.lifecycle?.canRetry ? { retry: true } : {}),
           dataRange: {
             from: aaDraft.dataFrom,
             to: aaDraft.dataTo
@@ -766,7 +781,7 @@ export function App() {
       );
       setAaSessions((current) => [sessionRecord, ...current].slice(0, 20));
       setApiMode("mock-api");
-      setAaStatus(`Session created: ${session?.id ?? "unknown"}${cashflowInflow90d ? ` · inflow Rs ${cashflowInflow90d.toLocaleString("en-IN")}` : ""}`);
+      setAaStatus(`${privateSandbox ? "Fetch status" : "Session created"}: ${session?.id ?? "unknown"}${cashflowInflow90d ? ` · inflow Rs ${cashflowInflow90d.toLocaleString("en-IN")}` : ""}`);
       await refreshAaState();
     } catch (error) {
       setApiMode("fallback");
@@ -1155,9 +1170,9 @@ function OwnerConsole({
             <Check size={18} aria-hidden="true" />
             {privateSandbox ? "Refresh consent" : "Create consent"}
           </button>
-          <button className="secondary-button" onClick={createAaSession} disabled={aaBusy !== "idle" || !(aaSelectedConsentId || aaState?.latestConsent?.id)}>
+          <button className="secondary-button" onClick={createAaSession} disabled={aaBusy !== "idle" || !(aaSelectedConsentId || aaState?.latestConsent?.id) || (privateSandbox && !(aaState?.lifecycle?.canFetch || aaState?.lifecycle?.canRetry))}>
             <ArrowRight size={18} aria-hidden="true" />
-            Create session
+            {privateSandbox ? aaState?.lifecycle?.canRetry ? "Retry failed fetch" : "Fetch approved statement" : "Create session"}
           </button>
           <button className="icon-button" onClick={refreshAaState} aria-label="Refresh AA state" title="Refresh AA state">
             <RefreshCw size={18} aria-hidden="true" />
@@ -1165,6 +1180,7 @@ function OwnerConsole({
         </div>
 
         {aaStatus && <div className="aa-banner">{aaStatus}</div>}
+        {privateSandbox && aaState?.lifecycle && <div className="aa-banner" role="status">{aaState.lifecycle.message}</div>}
 
         <div className="aa-status-grid">
           <div className="aa-status-card">
@@ -1189,7 +1205,7 @@ function OwnerConsole({
             <div className="panel-header compact">
               <div>
                 <span className="section-label">Consent history</span>
-                <h2>Local draft records</h2>
+                <h2>{privateSandbox ? "Saved consent references" : "Local draft records"}</h2>
               </div>
               <History size={18} aria-hidden="true" />
             </div>

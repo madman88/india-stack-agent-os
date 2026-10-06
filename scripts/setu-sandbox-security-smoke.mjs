@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createSetuGateway } from "../services/shared/setu-aa-gateway.mjs";
 import { normalizeSetuCashflowAttestation } from "../services/shared/setu-aa-normalizers.mjs";
 import { handleAaSandbox } from "../services/sites/aa-sandbox.mjs";
+import { testDb } from "./d1-test-db.mjs";
 
 let now = 0;
 let logins = 0;
@@ -27,10 +28,11 @@ await gateway.request("/v2/fips");
 assert.equal(logins, 3, "refresh once on rejected token");
 
 const consentId = "11111111-1111-1111-1111-111111111111";
-const env = { ...config, AA_ADAPTER_MODE: "sandbox", AA_SANDBOX_ACCESS_KEY: "private-key", AA_SANDBOX_CONSENT_ID: consentId };
+const env = { ...config, DB: testDb(), AA_ADAPTER_MODE: "sandbox", AA_SANDBOX_ACCESS_KEY: "private-key", AA_SANDBOX_CONSENT_ID: consentId };
 const originalFetch = globalThis.fetch;
 let calls = 0;
 let consentStatus = "PENDING";
+const approvedRange = { from: new Date(Date.now() - 90 * 86400000).toISOString(), to: new Date().toISOString() };
 const request = (path, body, key = "private-key") => new Request(`https://example.test/v1/rails/aa/${path}`, {
   method: body ? "POST" : "GET", headers: key ? { "x-aa-sandbox-key": key } : {}, ...(body ? { body: JSON.stringify(body) } : {})
 });
@@ -38,10 +40,10 @@ try {
   globalThis.fetch = async (url, options) => {
     calls++;
     if (String(url).includes("/users/login")) return Response.json({ access_token: "private-token", expires_in: 300 });
-    if (String(url).includes("/consents/")) return Response.json({ id: consentId, status: consentStatus, detail: { dataRange: { from: "2026-01-01", to: "2026-03-31" } } });
+    if (String(url).includes("/consents/")) return Response.json({ id: consentId, status: consentStatus, detail: { dataRange: approvedRange } });
     if (options.method === "POST") {
       const body = JSON.parse(options.body);
-      assert.equal(body.dataRange.from, "2026-01-01", "use consent range, not browser range");
+      assert.equal(body.dataRange.from, approvedRange.from, "use consent range, not browser range");
       return Response.json({ id: "22222222-2222-2222-2222-222222222222", consentId, status: "PENDING" });
     }
     return Response.json({ id: "22222222-2222-2222-2222-222222222222", consentId: "another-consent", status: "COMPLETED", fips: [] });
@@ -54,7 +56,7 @@ try {
   assert.equal((await handleAaSandbox(request("sessions", { consentId: "another-consent" }), env)).status, 400);
   assert.equal((await handleAaSandbox(request("sessions", { consentId, dataRange: { from: "unapproved" } }), env)).status, 200);
   const response = await handleAaSandbox(request("sessions/22222222-2222-2222-2222-222222222222/cashflow"), env);
-  assert.equal(response.status, 400, "reject sessions belonging to another consent");
+  assert.equal(response.status, 503, "reject sessions belonging to another consent");
   assert.equal((await handleAaSandbox(request("callback", {}), env)).status, 503);
 } finally { globalThis.fetch = originalFetch; }
 

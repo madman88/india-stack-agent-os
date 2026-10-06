@@ -22,8 +22,26 @@ Worker restarts. It reuses the pinned consent, checks ACTIVE status before data
 fetches, uses the provider-approved range, and rejects sessions for other
 consents. Approve using Setu's returned URL; choose Setu FIP-2 for dummy data.
 Create a session after approval and use **Refresh AA state** to fetch its status
-and cashflow when ready. Private pilot state is read on demand; demo audit logs
-are not an authenticated provider event ledger.
+and cashflow when ready. Consent/session references, status observations, fetch
+requests and decision audit events persist in the Site's D1 database (`DB`). Saved
+history contains no raw bank statements or secrets. These are application
+observations, not signed provider attestations.
+
+Pending/partial sessions are polled for status without fetching their financial
+payload. Completed sessions are reused; failed/expired sessions require an
+explicit **Retry failed fetch**. A database-enforced fetch lock prevents duplicate
+POSTs across workers. An uncertain POST is never automatically replayed: a new
+provider session is reconciled only by its ID or a creation timestamp at or after
+the saved request time. If Setu cannot supply either, the fetch stays blocked for
+operator reconciliation. There is no timeout-based unlocking.
+
+Expired/revoked consent blocks FI reads and session creation. Stale dates require
+a new approval. Provider outages preserve historical references but disable reads
+and estimates until current permission can be verified. Private session history
+comes from D1 rather than browser storage. Missing storage fails closed.
+
+Schema is in `db/schema.ts`; generated Drizzle migrations are applied by Sites
+before Worker upload. Applied migration files and metadata are immutable.
 
 Callbacks are disabled for this pilot until sender authentication is implemented.
 Consent and session status are checked by polling Setu. The private workspace
