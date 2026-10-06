@@ -4,6 +4,7 @@ import { readApprovedAaCashflow } from "../shared/approved-aa-cashflow.mjs";
 import { evaluateWorkingCapital } from "../shared/working-capital.mjs";
 import { createAaStore } from "./aa-store.mjs";
 import { aaLifecycle, effectiveConsent } from "../shared/aa-lifecycle.mjs";
+import { authorizeBusiness } from "./business-access.mjs";
 
 const clients = new WeakMap();
 function client(env) {
@@ -21,15 +22,20 @@ export async function handleAaSandbox(request, env = {}, scenario = {}) {
   const decisionPath = url.pathname === "/v1/decisions/working-capital";
   const messagePath = url.pathname === "/v1/agent/messages";
   const approvalPath = url.pathname === "/v1/approvals";
-  if (env.AA_ADAPTER_MODE !== "sandbox" || !(url.pathname.startsWith("/v1/rails/aa/") || decisionPath || messagePath || approvalPath)) return null;
+  if (!(url.pathname.startsWith("/v1/rails/aa/") || decisionPath || messagePath || approvalPath)) return null;
+  if (request.headers.has("x-aa-sandbox-key")) return json({ error: "sign_in_required", message: "Private access links have been replaced by sign-in." }, 401);
+  if (!request.headers.has("x-business-id")) return null;
+  if (env.AA_ADAPTER_MODE !== "sandbox") return json({ error: "sandbox_unavailable" }, 503);
   if (url.pathname.endsWith("/callback")) return json({ error: "sandbox_uses_polling" }, 503);
-  const supplied = request.headers.get("x-aa-sandbox-key");
-  if (!supplied) return null;
-  if (!env.AA_SANDBOX_ACCESS_KEY || supplied !== env.AA_SANDBOX_ACCESS_KEY) return json({ error: "unauthorized" }, 401);
-  if (!env.AA_SANDBOX_CONSENT_ID) return json({ error: "sandbox_consent_not_configured" }, 503);
+  let access;
+  try {
+    const ownerOnly = request.method === "POST" && !decisionPath && !messagePath;
+    access = await authorizeBusiness(request, env, ownerOnly);
+  } catch (error) { return json({ error: "access_denied", message: error.status ? error.message : "Access records are unavailable." }, error.status ?? 503); }
+  if (url.searchParams.has("businessId") && url.searchParams.get("businessId") !== access.businessId) return json({ error: "access_denied" }, 403);
   const gateway = client(env);
   let store;
-  const consentId = env.AA_SANDBOX_CONSENT_ID;
+  const consentId = access.consentId;
   const idPattern = /^[a-f0-9-]{36}$/i;
 
   async function consent() {
@@ -70,21 +76,21 @@ export async function handleAaSandbox(request, env = {}, scenario = {}) {
   }
   const credentialStatus = { provider: "setu", mode: "sandbox", baseUrl: env.AA_BASE_URL ?? "https://fiu-sandbox.setu.co", missing: [] };
   try {
-    store = createAaStore(env.DB);
+    store = createAaStore(env.DB, access);
     if (request.method === "POST" && approvalPath) return json({ error: "preview_only", message: "Sandbox estimates are for review; execution is disabled." }, 409);
     if (request.method === "POST" && (decisionPath || messagePath)) {
       const body = await request.json();
-      if (body.businessId && body.businessId !== "ravi-stores") return json({ error: "not_found" }, 404);
+      if (body.businessId && body.businessId !== access.businessId) return json({ error: "not_found" }, 404);
       let decision;
       try {
         const cashflow = await readApprovedAaCashflow(gateway, consentId, Date.now, async (kind, raw) => {
           await store.record(kind, consentId, kind === "consent" ? { ...normalizeSetuConsent(raw), status: effectiveConsent(raw), expiresAt: raw.detail?.consentExpiry ?? null } : raw);
         });
-        decision = evaluateWorkingCapital("ravi-stores", cashflow, scenario.loanOffers?.[0], {
+        decision = evaluateWorkingCapital(access.businessId, cashflow, scenario.loanOffers?.[0], {
           demand: { rail: "ONDC", simulated: true }, compliance: { rail: "GSTN", simulated: true }, loanOffers: scenario.loanOffers ?? []
         });
       } catch (error) {
-        decision = { businessId: "ravi-stores", mode: "aa-sandbox", loanOffers: scenario.loanOffers ?? [], recommendation: { amount: 0, status: "hold", reason: `Hold: ${error.message}. No fixture cashflow was substituted.`, requiredApproval: true, repaymentCapDays: 45 }, provenance: { aa: "unavailable", offers: "simulated", execution: "disabled" } };
+        decision = { businessId: access.businessId, mode: "aa-sandbox", loanOffers: scenario.loanOffers ?? [], recommendation: { amount: 0, status: "hold", reason: `Hold: ${error.message}. No fixture cashflow was substituted.`, requiredApproval: true, repaymentCapDays: 45 }, provenance: { aa: "unavailable", offers: "simulated", execution: "disabled" } };
       }
       await store.audit(consentId, "decision.evaluated", decision.recommendation.status, decision.evidence?.cashflow?.source?.sessionId ?? null);
       return json(messagePath ? { message: `${decision.recommendation.reason} This is a sandbox estimate using dummy bank data and simulated offers; execution is disabled.`, meta: "AA sandbox calculation" } : decision);
@@ -97,10 +103,10 @@ export async function handleAaSandbox(request, env = {}, scenario = {}) {
         const latest = latestConsent.status === "ACTIVE" ? await latestSession() : null;
         const lifecycle = latestConsent.status === "ACTIVE" ? await reconcile(latest) ?? aaLifecycle(latestConsent, latest) : aaLifecycle(latestConsent, null);
         const history = await store.history(consentId);
-        return json({ businessId: "ravi-stores", provider: "setu", credentialStatus, latestConsent, latestSession: latest, ...history, lifecycle, canProceedToSandbox: lifecycle.stage === "ready" });
+        return json({ businessId: access.businessId, role: access.role, provider: "setu", credentialStatus, latestConsent, latestSession: latest, ...history, lifecycle, canProceedToSandbox: lifecycle.stage === "ready" });
       } catch {
         const history = await store.history(consentId);
-        return json({ businessId: "ravi-stores", provider: "setu", credentialStatus, latestConsent: null, latestSession: null, ...history, lifecycle: { stage: "provider_unavailable", message: "Could not verify Setu status. Saved references are historical; retry refresh before reading data.", canFetch: false, canRetry: false }, canProceedToSandbox: false });
+        return json({ businessId: access.businessId, role: access.role, provider: "setu", credentialStatus, latestConsent: null, latestSession: null, ...history, lifecycle: { stage: "provider_unavailable", message: "Could not verify Setu status. Saved references are historical; retry refresh before reading data.", canFetch: false, canRetry: false }, canProceedToSandbox: false });
       }
     }
     if (request.method === "POST" && url.pathname.endsWith("/consents")) return json(await consent());
@@ -111,6 +117,7 @@ export async function handleAaSandbox(request, env = {}, scenario = {}) {
     }
     if (request.method === "POST" && url.pathname.endsWith("/sessions")) {
       const body = await request.json();
+      if (body.businessId && body.businessId !== access.businessId) return json({ error: "access_denied" }, 403);
       const approved = await consent();
       if (body.consentId !== consentId) return json({ error: "invalid_consent" }, 400);
       if (approved.status !== "ACTIVE") return json({ error: "consent_not_active", message: aaLifecycle(approved, null).message }, 409);
@@ -153,6 +160,10 @@ export async function handleAaSandbox(request, env = {}, scenario = {}) {
     const sessionMatch = url.pathname.match(/\/sessions\/([^/]+)(\/cashflow)?$/);
     if (request.method === "GET" && sessionMatch) {
       if ((await consent()).status !== "ACTIVE") return json({ error: "consent_not_active" }, 409);
+      const listing = await gateway.request(`/v2/consents/${consentId}/data-sessions`);
+      const listed = listing.dataSessions?.find((s) => s.sessionId === sessionMatch[1]);
+      if (!listed) return json({ error: "not_found" }, 404);
+      if (sessionMatch[2] && listed.status && !["PARTIAL", "COMPLETED"].includes(listed.status)) return json({ error: "session_not_ready" }, 409);
       const value = await session(sessionMatch[1]);
       if (sessionMatch[2] && !["PARTIAL", "COMPLETED"].includes(value.status)) return json({ error: "session_not_ready" }, 409);
       return json(sessionMatch[2] ? normalizeSetuCashflowAttestation(value) : value);

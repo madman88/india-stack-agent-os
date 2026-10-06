@@ -1,5 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync, readdirSync } from "node:fs";
+export const testOwnerHeaders = { "x-business-id": "ravi-stores", "oai-authenticated-user-id": "test-owner", "oai-authenticated-user-email": "owner@example.test", origin: "https://example.test" };
 export function testDb(path = ":memory:", migrate = true) {
   const sqlite = new DatabaseSync(path);
   let tail = Promise.resolve();

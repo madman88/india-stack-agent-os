@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { testDb } from "./d1-test-db.mjs";
+import { testDb, testOwnerHeaders } from "./d1-test-db.mjs";
 import { createAaStore } from "../services/sites/aa-store.mjs";
 import { aaLifecycle } from "../services/shared/aa-lifecycle.mjs";
 import { handleAaSandbox } from "../services/sites/aa-sandbox.mjs";
@@ -35,8 +35,8 @@ let reads = 0;
 let outage = false;
 let loseResponse = false;
 const originalFetch = globalThis.fetch;
-const env = () => ({ DB: db, AA_ADAPTER_MODE: "sandbox", AA_SANDBOX_ACCESS_KEY: "key", AA_SANDBOX_CONSENT_ID: consentId, AA_ACCESS_TOKEN: "token", AA_PRODUCT_INSTANCE_ID: "product" });
-const request = (path, body) => new Request(`https://example.test/v1/rails/aa/${path}`, { method: body ? "POST" : "GET", headers: { "x-aa-sandbox-key": "key" }, ...(body ? { body: JSON.stringify(body) } : {}) });
+const env = () => ({ DB: db, AA_ADAPTER_MODE: "sandbox", AA_OWNER_EMAIL: "owner@example.test", AA_SANDBOX_CONSENT_ID: consentId, AA_ACCESS_TOKEN: "token", AA_PRODUCT_INSTANCE_ID: "product" });
+const request = (path, body) => new Request(`https://example.test/v1/rails/aa/${path}`, { method: body ? "POST" : "GET", headers: testOwnerHeaders, ...(body ? { body: JSON.stringify(body) } : {}) });
 try {
   globalThis.fetch = async (url, options) => {
     if (outage) throw new Error("network unavailable");

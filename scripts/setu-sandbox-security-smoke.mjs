@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createSetuGateway } from "../services/shared/setu-aa-gateway.mjs";
 import { normalizeSetuCashflowAttestation } from "../services/shared/setu-aa-normalizers.mjs";
 import { handleAaSandbox } from "../services/sites/aa-sandbox.mjs";
-import { testDb } from "./d1-test-db.mjs";
+import { testDb, testOwnerHeaders } from "./d1-test-db.mjs";
 
 let now = 0;
 let logins = 0;
@@ -28,13 +28,13 @@ await gateway.request("/v2/fips");
 assert.equal(logins, 3, "refresh once on rejected token");
 
 const consentId = "11111111-1111-1111-1111-111111111111";
-const env = { ...config, DB: testDb(), AA_ADAPTER_MODE: "sandbox", AA_SANDBOX_ACCESS_KEY: "private-key", AA_SANDBOX_CONSENT_ID: consentId };
+const env = { ...config, DB: testDb(), AA_ADAPTER_MODE: "sandbox", AA_OWNER_EMAIL: "owner@example.test", AA_SANDBOX_CONSENT_ID: consentId };
 const originalFetch = globalThis.fetch;
 let calls = 0;
 let consentStatus = "PENDING";
 const approvedRange = { from: new Date(Date.now() - 90 * 86400000).toISOString(), to: new Date().toISOString() };
 const request = (path, body, key = "private-key") => new Request(`https://example.test/v1/rails/aa/${path}`, {
-  method: body ? "POST" : "GET", headers: key ? { "x-aa-sandbox-key": key } : {}, ...(body ? { body: JSON.stringify(body) } : {})
+  method: body ? "POST" : "GET", headers: key === "private-key" ? testOwnerHeaders : key ? { "x-business-id": "ravi-stores" } : {}, ...(body ? { body: JSON.stringify(body) } : {})
 });
 try {
   globalThis.fetch = async (url, options) => {
@@ -56,7 +56,7 @@ try {
   assert.equal((await handleAaSandbox(request("sessions", { consentId: "another-consent" }), env)).status, 400);
   assert.equal((await handleAaSandbox(request("sessions", { consentId, dataRange: { from: "unapproved" } }), env)).status, 200);
   const response = await handleAaSandbox(request("sessions/22222222-2222-2222-2222-222222222222/cashflow"), env);
-  assert.equal(response.status, 503, "reject sessions belonging to another consent");
+  assert.equal(response.status, 404, "reject sessions outside the scoped consent listing before fetching financial data");
   assert.equal((await handleAaSandbox(request("callback", {}), env)).status, 503);
 } finally { globalThis.fetch = originalFetch; }
 

@@ -3,7 +3,7 @@ import { evaluateWorkingCapital } from "../services/shared/working-capital.mjs";
 import { readApprovedAaCashflow } from "../services/shared/approved-aa-cashflow.mjs";
 import { normalizeSetuCashflowAttestation } from "../services/shared/setu-aa-normalizers.mjs";
 import { handleAaSandbox } from "../services/sites/aa-sandbox.mjs";
-import { testDb } from "./d1-test-db.mjs";
+import { testDb, testOwnerHeaders } from "./d1-test-db.mjs";
 
 const offer = { lender: "Simulated lender", apr: "16.8%", fee: "Rs 680", amount: "Rs 80,000" };
 const base = { inflow90d: 600000, outflow90d: 300000, observedDays: 90, volatility: "moderate", dataQuality: { decisionReady: true }, reportedBalance: 40000 };
@@ -68,8 +68,8 @@ const undated = rawSession();
 delete undated.fips[0].accounts[0].data.account.transactions.transaction[0].transactionTimestamp;
 assert.equal(normalizeSetuCashflowAttestation(undated).dataQuality.decisionReady, false);
 
-const env = { DB: testDb(), AA_ADAPTER_MODE: "sandbox", AA_SANDBOX_ACCESS_KEY: "key", AA_SANDBOX_CONSENT_ID: consentId, AA_ACCESS_TOKEN: "test-token", AA_PRODUCT_INSTANCE_ID: "test-product" };
-const request = (path, key = "key", body = {}) => new Request(`https://example.test/v1/${path}`, { method: "POST", headers: key ? { "x-aa-sandbox-key": key } : {}, body: JSON.stringify(body) });
+const env = { DB: testDb(), AA_ADAPTER_MODE: "sandbox", AA_OWNER_EMAIL: "owner@example.test", AA_SANDBOX_CONSENT_ID: consentId, AA_ACCESS_TOKEN: "test-token", AA_PRODUCT_INSTANCE_ID: "test-product" };
+const request = (path, key = "key", body = {}) => new Request(`https://example.test/v1/${path}`, { method: "POST", headers: key === "key" ? testOwnerHeaders : key ? { "x-business-id": "ravi-stores" } : {}, body: JSON.stringify(body) });
 const originalFetch = globalThis.fetch;
 try {
   globalThis.fetch = async (url) => Response.json(await fakeGateway.request(new URL(url).pathname + new URL(url).search));

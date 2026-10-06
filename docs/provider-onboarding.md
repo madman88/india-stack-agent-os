@@ -10,12 +10,33 @@ the simulated demo. Configure these server runtime values through Sites:
 - `AA_CLIENT_ID`, `AA_CLIENT_SECRET` (secrets; exchanged for short-lived tokens)
 - `AA_PRODUCT_INSTANCE_ID`
 - `AA_SANDBOX_CONSENT_ID` (the provider-created consent pinned to this pilot)
-- `AA_SANDBOX_ACCESS_KEY` (a randomly generated secret for the private workspace)
+- `AA_BUSINESS_ID=ravi-stores`
+- `AA_OWNER_EMAIL` (server-configured email for first owner enrollment)
+- `APP_ORIGIN` (the deployed Site origin, used for same-origin action checks)
 
-Open the app using `/#aa-access=<private workspace key>` or enter the key with
-**Open private sandbox**. The app removes the fragment and keeps the key only in
-session storage. Never share this private link publicly. Requests carry the key
-to the same origin only; keys and provider credentials are excluded from builds.
+Open `/workspace` and choose **Sign in with ChatGPT**. Sites owns sign-in and
+sign-out and forwards authenticated identity headers to the Worker. The app never
+accepts a browser-supplied role or user ID. The first signed-in identity matching
+the configured owner email enrolls the business owner; subsequent checks use the
+stable Site user subject, including after an email change. The current pilot has
+one configured business mapped to its consent in `business_access`.
+
+Owners can grant/revoke reviewers by email; invitations are tied to a stable Site
+subject on first sign-in and cannot be claimed by a different subject afterward.
+No invitation email is sent. Share the ordinary workspace URL with the reviewer.
+Reviewers can read scoped evidence, history and estimates, but cannot create
+sessions or change permissions. Permissions are checked on every request and
+revocation applies to subsequent reads. Writes require a matching Origin header.
+Audit events include the authenticated actor subject and role.
+
+The public demo remains anonymous and simulated. Workspace requests select the
+business with `x-business-id` but still need dispatch-verified identity and a
+server-side membership check. Former `x-aa-sandbox-key` requests are rejected;
+old URL fragments navigate to the sign-in workspace without granting access.
+Remove `AA_SANDBOX_ACCESS_KEY` from hosted configuration. Provider credentials
+remain server-side. This auth module is for Sites dispatch, not a standalone Node
+API exposed directly to the internet; trusting user-supplied identity headers
+outside dispatch is unsafe.
 
 The pilot reads consent and session state directly from Setu, so it survives
 Worker restarts. It reuses the pinned consent, checks ACTIVE status before data

@@ -46,18 +46,22 @@ describe("App AA workflow", () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
+    window.history.replaceState(null, "", "/");
     vi.useRealTimers();
   });
 
   it("shows a cashflow-derived sandbox amount and clears it when refresh fails", async () => {
-    sessionStorage.setItem("isao.aaAccessKey", "private-key");
+    window.history.replaceState(null, "", "/workspace");
     let unavailable = false;
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = pathOf(input);
+      if (path === "/v1/auth/me") return jsonResponse({ authenticated: true, role: "owner", email: "owner@example.test" });
+      if (path === "/v1/access/reviewers") return jsonResponse({ reviewers: [] });
       if (path === "/v1/businesses/ravi-stores/snapshot") return jsonResponse(snapshot);
       if (path === "/v1/rails/aa/state") return jsonResponse({ ...emptyAaState, credentialStatus: { ...emptyAaState.credentialStatus, mode: "sandbox" } });
       if (path === "/v1/decisions/working-capital") {
-        expect(new Headers(init?.headers).get("x-aa-sandbox-key")).toBe("private-key");
+        expect(new Headers(init?.headers).get("x-business-id")).toBe("ravi-stores");
+        expect(new Headers(init?.headers).has("x-aa-sandbox-key")).toBe(false);
         if (unavailable) return jsonResponse({ error: "unavailable" }, 503);
         return jsonResponse({ mode: "aa-sandbox", recommendation: { amount: 54000, status: "review", reason: "Estimate from net bank inflows.", repaymentCapDays: 45 }, calculation: { estimatedRepayment: 55800, reportedBalance: 30261.9, netInflow: 597606.92, repaymentBudget: 56025 }, evidence: { cashflow: { inflow90d: 1570466.57, outflow90d: 972859.65, source: { sessionId: "sandbox-session" } } } });
       }
@@ -76,10 +80,12 @@ describe("App AA workflow", () => {
   });
 
   it("shows durable history while blocking fetches after consent expiry", async () => {
-    sessionStorage.setItem("isao.aaAccessKey", "private-key");
+    window.history.replaceState(null, "", "/workspace");
     localStorage.setItem("isao.aaSessions", JSON.stringify([{ sessionId: "obsolete-browser-session", cashflowInflow90d: 999999 }]));
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const path = pathOf(input);
+      if (path === "/v1/auth/me") return jsonResponse({ authenticated: true, role: "owner", email: "owner@example.test" });
+      if (path === "/v1/access/reviewers") return jsonResponse({ reviewers: [] });
       if (path === "/v1/businesses/ravi-stores/snapshot") return jsonResponse(snapshot);
       if (path === "/v1/rails/aa/state") return jsonResponse({ ...emptyAaState,
         credentialStatus: { ...emptyAaState.credentialStatus, mode: "sandbox" },
@@ -102,6 +108,33 @@ describe("App AA workflow", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+  });
+
+  it("shows sign-in without requesting AA data for an anonymous workspace visitor", async () => {
+    window.history.replaceState(null, "", "/workspace");
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      calls.push(pathOf(input));
+      return jsonResponse({ authenticated: false, role: null });
+    }));
+    render(<App />);
+    const signIn = await screen.findByRole("link", { name: "Sign in with ChatGPT" });
+    expect(signIn).toHaveAttribute("href", "/signin-with-chatgpt?return_to=%2Fworkspace");
+    expect(signIn).toHaveAttribute("target", "_top");
+    expect(calls).toEqual(["/v1/auth/me"]);
+  });
+
+  it("shows access denial without requesting AA data for an uninvited signed-in account", async () => {
+    window.history.replaceState(null, "", "/workspace");
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      calls.push(pathOf(input));
+      return jsonResponse({ authenticated: true, role: null, email: "uninvited@example.test", message: "Ask the business owner to grant you reviewer access." }, 403);
+    }));
+    render(<App />);
+    await screen.findByText("Ask the business owner to grant you reviewer access.");
+    expect(screen.queryByText("Reviewer access")).not.toBeInTheDocument();
+    expect(calls).toEqual(["/v1/auth/me"]);
   });
 
   it("creates an AA consent with the editable draft payload", async () => {

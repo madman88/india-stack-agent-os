@@ -52,6 +52,7 @@ writeFileSync(
   serverPath,
   `
 import { handleAaSandbox } from "./sites/aa-sandbox.mjs";
+import { handleBusinessAccess } from "./sites/business-access.mjs";
 const embeddedIndexHtml = ${JSON.stringify(indexHtml)};
 const embeddedAssets = ${JSON.stringify(embeddedAssets)};
 const businessId = ${JSON.stringify(businessId)};
@@ -531,6 +532,8 @@ function serveAsset(request, url) {
 export default {
   async fetch(request, env = {}) {
     const url = new URL(request.url);
+    const accessResponse = await handleBusinessAccess(request, env);
+    if (accessResponse) return accessResponse;
     const sandboxResponse = await handleAaSandbox(request, env, scenario);
     if (sandboxResponse) return sandboxResponse;
     const apiResponse = await handleApi(request, url);

@@ -34,6 +34,8 @@ import "./styles.css";
 type Rail = "AA" | "ONDC" | "GSTN" | "OCEN" | "UPI" | "DigiLocker" | "Finternet" | "BBPS";
 type View = "owner" | "partner";
 type ActionState = "pending" | "approved" | "rejected";
+type WorkspaceProfile = { authenticated: boolean; email?: string; role: "owner" | "reviewer" | null; businessId?: string; message?: string };
+type ReviewerGrant = { email: string; active: boolean; enrolled: boolean };
 type SandboxDecision = {
   mode: "aa-sandbox";
   recommendation: { amount: number; reason: string; status: "review" | "hold"; repaymentCapDays: number };
@@ -137,6 +139,7 @@ type AaState = {
     traceId?: string | null;
   };
   auditLogs: Array<{
+    actorRole?: string | null;
     rail: string;
     action: string;
     consentId?: string | null;
@@ -368,7 +371,11 @@ function toIsoValue(localValue: string) {
 }
 
 export function App() {
-  const privateSandbox = Boolean(sessionStorage.getItem("isao.aaAccessKey"));
+  const privateSandbox = window.location.pathname === "/workspace";
+  const [profile, setProfile] = useState<WorkspaceProfile | null>(null);
+  const [reviewers, setReviewers] = useState<ReviewerGrant[]>([]);
+  const [reviewerEmail, setReviewerEmail] = useState("");
+  const [accessStatus, setAccessStatus] = useState<string | null>(null);
   const [sandboxDecision, setSandboxDecision] = useState<SandboxDecision | null>(null);
   const [decisionError, setDecisionError] = useState<string | null>(null);
   const [view, setView] = useState<View>("owner");
@@ -398,7 +405,7 @@ export function App() {
 
   useEffect(() => {
     let cancelled = false;
-
+    function loadData() {
     apiFetch("/v1/businesses/ravi-stores/snapshot")
       .then((response) => {
         if (!response.ok) throw new Error(`snapshot ${response.status}`);
@@ -429,6 +436,20 @@ export function App() {
       });
 
     if (privateSandbox) void refreshDecision();
+    }
+
+    if (privateSandbox) {
+      apiFetch("/v1/auth/me").then(async (response) => {
+        const current = await response.json() as WorkspaceProfile;
+        if (cancelled) return;
+        setProfile(current);
+        if (response.ok && current.role) {
+          if (current.role === "reviewer") setView("partner");
+          if (current.role === "owner") void refreshReviewers();
+          loadData();
+        }
+      }).catch(() => { if (!cancelled) setProfile({ authenticated: false, role: null, message: "Sign-in status is unavailable. Reload to retry." }); });
+    } else loadData();
 
     return () => {
       cancelled = true;
@@ -493,7 +514,7 @@ export function App() {
         body: JSON.stringify({ businessId: "ravi-stores" })
       });
       const decision = await response.json();
-      if (!response.ok || decision.mode !== "aa-sandbox") throw new Error("Could not verify the sandbox estimate. Check your private access link and refresh.");
+      if (!response.ok || decision.mode !== "aa-sandbox") throw new Error("Could not verify the sandbox estimate. Check your sign-in and refresh.");
       setSandboxDecision(decision);
       setMessages([{ id: Date.now(), from: "agent", text: decision.recommendation.reason, meta: "Setu dummy bank data · simulated demand and offers" }]);
     } catch (error) {
@@ -621,7 +642,7 @@ export function App() {
     }
     } catch {
       if (privateSandbox) setAaState(null);
-      setAaStatus("Could not refresh sandbox state. Check your access key and retry.");
+      setAaStatus("Could not refresh sandbox state. Check your sign-in and retry.");
     }
     if (privateSandbox) await refreshDecision();
   }
@@ -720,6 +741,7 @@ export function App() {
   }
 
   async function createAaSession() {
+    if (privateSandbox && profile?.role !== "owner") return;
     const selectedRecord = aaConsents.find((record) => record.recordId === aaSelectedConsentId || record.consentId === aaSelectedConsentId);
     const consentId = selectedRecord?.consentId ?? aaState?.latestConsent?.id;
     if (!consentId) return;
@@ -844,6 +866,36 @@ export function App() {
     setDraft("");
   }
 
+  async function refreshReviewers() {
+    try {
+      const response = await apiFetch("/v1/access/reviewers");
+      if (!response.ok) throw new Error("Could not load reviewer permissions.");
+      setReviewers((await response.json()).reviewers);
+    } catch { setAccessStatus("Could not load reviewer permissions. Reload to retry."); }
+  }
+
+  async function changeReviewer(email: string, active: boolean) {
+    setAccessStatus(null);
+    try {
+      const response = await apiFetch("/v1/access/reviewers", { method: active ? "POST" : "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ email }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message ?? "Could not update reviewer access.");
+      setReviewerEmail("");
+      await refreshReviewers();
+      setAccessStatus(active ? "Reviewer access granted. Share the workspace link with them; no email was sent." : "Reviewer access revoked.");
+    } catch (error) { setAccessStatus(error instanceof Error ? error.message : "Access update failed."); }
+  }
+
+  if (privateSandbox && !profile?.role) return <main className="workspace" style={{ maxWidth: 720, margin: "60px auto", padding: 24 }}>
+    <section className="aa-panel">
+      <h1>Business workspace</h1>
+      <p>{!profile ? "Checking sign-in…" : profile.message ?? (profile.authenticated ? "Your account has no access to this business. Ask the owner to grant reviewer access." : "Sign in to access your business's AA evidence and audit history.")}</p>
+      {profile?.email && <p>Signed in as {profile.email}</p>}
+      {profile && <a className="primary-button" href={profile.authenticated ? "/signout-with-chatgpt?return_to=%2Fworkspace" : "/signin-with-chatgpt?return_to=%2Fworkspace"} target="_top">{profile.authenticated ? "Sign out" : "Sign in with ChatGPT"}</a>}
+      <p><a href="/">View public demo</a></p>
+    </section>
+  </main>;
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -891,6 +943,7 @@ export function App() {
             <h1>{view === "owner" ? "Operator Console" : "Partner Risk Console"}</h1>
           </div>
           <div className="topbar-actions">
+            {privateSandbox ? <><span>{profile?.email} · {profile?.role}</span><a href="/signout-with-chatgpt?return_to=%2Fworkspace" target="_top">Sign out</a></> : <a href="/workspace">Sign in to workspace</a>}
             <button className="icon-button" onClick={resetScenario} aria-label={privateSandbox ? "Refresh estimate" : "Reset scenario"} title={privateSandbox ? "Refresh estimate" : "Reset scenario"}>
               <RefreshCw size={18} aria-hidden="true" />
             </button>
@@ -901,11 +954,23 @@ export function App() {
 
         {privateSandbox && <div className="aa-banner">AA evidence uses Setu sandbox dummy data. Inventory, lender offers, partner scores and proof events remain simulated.</div>}
 
+        {privateSandbox && profile?.role === "owner" && <section className="aa-panel" style={{ marginBottom: 20 }}>
+          <h2>Reviewer access</h2>
+          <p>Reviewers can read this business's evidence and estimates. Only you can fetch new statements or change access.</p>
+          <form className="chat-form" onSubmit={(event) => { event.preventDefault(); void changeReviewer(reviewerEmail, true); }}>
+            <input type="email" required aria-label="Reviewer email" placeholder="Reviewer email" value={reviewerEmail} onChange={(event) => setReviewerEmail(event.target.value)} />
+            <button className="primary-button" type="submit">Grant reviewer access</button>
+          </form>
+          {reviewers.map((r) => <div className="aa-list-row" key={r.email}><span>{r.email} · {r.active ? r.enrolled ? "Active reviewer" : "Awaiting first sign-in" : "Revoked"}</span>{r.active && <button className="secondary-button" onClick={() => { void changeReviewer(r.email, false); }}>Revoke access</button>}</div>)}
+          {accessStatus && <p role="status">{accessStatus}</p>}
+        </section>}
+
         {view === "owner" ? (
           <OwnerConsole
             actionState={actionState}
             recommendation={recommendation}
             privateSandbox={privateSandbox}
+            canManage={profile?.role === "owner"}
             sandboxDecision={sandboxDecision}
             messages={messages}
             draft={draft}
@@ -954,6 +1019,7 @@ function OwnerConsole({
   actionState,
   recommendation,
   privateSandbox,
+  canManage,
   sandboxDecision,
   messages,
   draft,
@@ -980,6 +1046,7 @@ function OwnerConsole({
   actionState: ActionState;
   recommendation: { label: string; detail: string; tone: string };
   privateSandbox: boolean;
+  canManage: boolean;
   sandboxDecision: SandboxDecision | null;
   messages: ChatMessage[];
   draft: string;
@@ -1161,16 +1228,13 @@ function OwnerConsole({
         </fieldset>
 
         <div className="aa-actions">
-          <button className="secondary-button" onClick={() => {
-            const key = window.prompt("Enter your private sandbox access key");
-            if (key) { sessionStorage.setItem("isao.aaAccessKey", key); window.location.reload(); }
-          }}>Open private sandbox</button>
+          {!privateSandbox && <a className="secondary-button" href="/workspace">Signed-in workspace</a>}
           {aaState?.latestConsent?.url && <a className="secondary-button" href={aaState.latestConsent.url} target="_blank" rel="noopener noreferrer">Review consent in Setu</a>}
           <button className="primary-button" onClick={createAaConsent} disabled={aaBusy !== "idle"}>
             <Check size={18} aria-hidden="true" />
             {privateSandbox ? "Refresh consent" : "Create consent"}
           </button>
-          <button className="secondary-button" onClick={createAaSession} disabled={aaBusy !== "idle" || !(aaSelectedConsentId || aaState?.latestConsent?.id) || (privateSandbox && !(aaState?.lifecycle?.canFetch || aaState?.lifecycle?.canRetry))}>
+          <button className="secondary-button" onClick={createAaSession} disabled={aaBusy !== "idle" || !(aaSelectedConsentId || aaState?.latestConsent?.id) || (privateSandbox && (!canManage || !(aaState?.lifecycle?.canFetch || aaState?.lifecycle?.canRetry)))}>
             <ArrowRight size={18} aria-hidden="true" />
             {privateSandbox ? aaState?.lifecycle?.canRetry ? "Retry failed fetch" : "Fetch approved statement" : "Create session"}
           </button>
@@ -1258,7 +1322,7 @@ function OwnerConsole({
           {(aaState?.auditLogs ?? []).slice(0, 3).map((entry, index) => (
             <div className="aa-log-row" key={`${entry.action}-${index}`}>
               <div>
-                <strong>{entry.action}</strong>
+                <strong>{entry.action}{entry.actorRole ? ` · ${entry.actorRole}` : ""}</strong>
                 <span>{entry.consentId ?? entry.sessionId ?? entry.eventType ?? "AA event"}</span>
               </div>
               <span>{new Date(entry.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
@@ -1730,9 +1794,9 @@ function ControlItem({ label, status }: { label: string; status: string }) {
 
 const rootElement = document.getElementById("root");
 const sandboxKey = new URLSearchParams(window.location.hash.slice(1)).get("aa-access");
+sessionStorage.removeItem("isao.aaAccessKey");
 if (sandboxKey) {
-  sessionStorage.setItem("isao.aaAccessKey", sandboxKey);
-  window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  window.history.replaceState(null, "", "/workspace");
 }
 if (rootElement) {
   createRoot(rootElement).render(<App />);
@@ -1741,11 +1805,10 @@ if (rootElement) {
 function apiFetch(path: string, init?: RequestInit) {
   const apiOrigin = (import.meta as unknown as { env?: { VITE_API_ORIGIN?: string } }).env?.VITE_API_ORIGIN ?? "http://localhost:8787";
   const proxyUrl = path.startsWith("/v1") ? path : `/v1${path}`;
-  const key = sessionStorage.getItem("isao.aaAccessKey");
   const headers = new Headers(init?.headers);
-  if (key && (path.startsWith("/v1/rails/aa/") || ["/v1/decisions/working-capital", "/v1/agent/messages", "/v1/approvals"].includes(path))) headers.set("x-aa-sandbox-key", key);
-  const options = { ...init, headers };
-  // Keep sandbox credentials on this origin; never forward them on a fallback.
-  if (headers.has("x-aa-sandbox-key")) return fetch(proxyUrl, options);
+  const workspace = window.location.pathname === "/workspace";
+  if (workspace) headers.set("x-business-id", "ravi-stores");
+  const options = { ...init, headers, credentials: "same-origin" as RequestCredentials };
+  if (workspace) return fetch(proxyUrl, options);
   return fetch(proxyUrl, options).catch(async () => fetch(new URL(proxyUrl, apiOrigin), options));
 }
