@@ -7,7 +7,7 @@ const providers = {
     docs: "https://finvu.github.io/sandbox/"
   },
   setu: {
-    required: ["AA_BASE_URL", "AA_ACCESS_TOKEN", "AA_PRODUCT_INSTANCE_ID"],
+    required: ["AA_BASE_URL", "AA_PRODUCT_INSTANCE_ID"],
     optional: ["AA_CALLBACK_BASE_URL"],
     docs: "https://docs.setu.co/data/account-aggregator/api-integration/consent-flow"
   }
@@ -23,6 +23,9 @@ const config = providers[provider];
 assert(config, `Unsupported AA_SANDBOX_PROVIDER=${provider}. Expected one of: ${Object.keys(providers).join(", ")}`);
 
 const missing = config.required.filter((key) => !process.env[key]);
+if (provider === "setu" && !process.env.AA_ACCESS_TOKEN && !(process.env.AA_CLIENT_ID && process.env.AA_CLIENT_SECRET)) {
+  missing.push("AA_ACCESS_TOKEN or AA_CLIENT_ID + AA_CLIENT_SECRET");
+}
 if (missing.length > 0) {
   console.log(
     JSON.stringify(
@@ -37,6 +40,12 @@ if (missing.length > 0) {
       2
     )
   );
+  process.exit(0);
+}
+
+if (provider === "setu") {
+  const result = await createSetuGateway(process.env).request("/v2/fips");
+  console.log(JSON.stringify({ status: "authenticated", provider, baseUrl: process.env.AA_BASE_URL, fipCount: result.data?.length ?? 0 }, null, 2));
   process.exit(0);
 }
 
@@ -72,3 +81,4 @@ function providerHeaders(name) {
     "x-jws-signature": "preflight"
   };
 }
+import { createSetuGateway } from "../services/shared/setu-aa-gateway.mjs";

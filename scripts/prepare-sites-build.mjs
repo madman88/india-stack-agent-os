@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { businessId, scenario } from "../services/mock-api/lib/fixtures.mjs";
 
@@ -7,6 +7,8 @@ const hostingPath = join("dist", ".openai", "hosting.json");
 
 mkdirSync(dirname(serverPath), { recursive: true });
 mkdirSync(dirname(hostingPath), { recursive: true });
+cpSync("services/shared", "dist/server/shared", { recursive: true });
+cpSync("services/sites", "dist/server/sites", { recursive: true });
 
 writeFileSync(hostingPath, readFileSync(join(".openai", "hosting.json")));
 
@@ -49,6 +51,7 @@ const embeddedAssets = collectAssets("dist");
 writeFileSync(
   serverPath,
   `
+import { handleAaSandbox } from "./sites/aa-sandbox.mjs";
 const embeddedIndexHtml = ${JSON.stringify(indexHtml)};
 const embeddedAssets = ${JSON.stringify(embeddedAssets)};
 const businessId = ${JSON.stringify(businessId)};
@@ -526,8 +529,10 @@ function serveAsset(request, url) {
 }
 
 export default {
-  async fetch(request) {
+  async fetch(request, env = {}) {
     const url = new URL(request.url);
+    const sandboxResponse = await handleAaSandbox(request, env);
+    if (sandboxResponse) return sandboxResponse;
     const apiResponse = await handleApi(request, url);
     if (apiResponse) return apiResponse;
     return serveAsset(request, url);

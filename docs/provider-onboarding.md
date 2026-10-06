@@ -1,5 +1,40 @@
 # Provider Onboarding
 
+## Setu sandbox pilot on Sites
+
+The hosted app can run one real Setu sandbox consent while public visitors retain
+the simulated demo. Configure these server runtime values through Sites:
+
+- `AA_ADAPTER_MODE=sandbox` (other rails remain simulated)
+- `AA_BASE_URL=https://fiu-sandbox.setu.co`
+- `AA_CLIENT_ID`, `AA_CLIENT_SECRET` (secrets; exchanged for short-lived tokens)
+- `AA_PRODUCT_INSTANCE_ID`
+- `AA_SANDBOX_CONSENT_ID` (the provider-created consent pinned to this pilot)
+- `AA_SANDBOX_ACCESS_KEY` (a randomly generated secret for the private workspace)
+
+Open the app using `/#aa-access=<private workspace key>` or enter the key with
+**Open private sandbox**. The app removes the fragment and keeps the key only in
+session storage. Never share this private link publicly. Requests carry the key
+to the same origin only; keys and provider credentials are excluded from builds.
+
+The pilot reads consent and session state directly from Setu, so it survives
+Worker restarts. It reuses the pinned consent, checks ACTIVE status before data
+fetches, uses the provider-approved range, and rejects sessions for other
+consents. Approve using Setu's returned URL; choose Setu FIP-2 for dummy data.
+Create a session after approval and use **Refresh AA state** to fetch its status
+and cashflow when ready. Private pilot state is read on demand; demo audit logs
+are not an authenticated provider event ledger.
+
+Callbacks are disabled for this pilot until sender authentication is implemented.
+Consent and session status are checked by polling Setu. The rest of the app,
+including its working-capital recommendation, remains a simulation.
+
+For local Node testing, use `AA_ADAPTER_MODE=sandbox` with
+`RAIL_ADAPTER_MODE=fixture` to switch only the consent/session client to Setu.
+The working-capital AA adapter still requires separate wiring to a real session.
+The preflight now calls the authenticated FIP endpoint, rather than a root URL.
+Security/token-refresh checks: `npm run test:setu-security`.
+
 This is the handoff checklist for moving from mock or fixture rail adapters to real India Stack sandbox and production integrations.
 
 ## Current Adapter Modes

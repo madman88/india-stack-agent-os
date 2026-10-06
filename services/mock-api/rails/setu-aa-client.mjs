@@ -1,18 +1,23 @@
+import { normalizeSetuConsent, normalizeSetuDataSession, normalizeSetuCashflowAttestation } from "../../shared/setu-aa-normalizers.mjs";
+export { normalizeSetuConsent, normalizeSetuDataSession, normalizeSetuCashflowAttestation, normalizeSetuNotification } from "../../shared/setu-aa-normalizers.mjs";
+import { createSetuGateway } from "../../shared/setu-aa-gateway.mjs";
 import { fetchRailJson, railAdapterMode } from "../clients/rail-client.mjs";
 
 const setuConfig = {
   sandboxBaseUrl: process.env.AA_BASE_URL ?? "https://fiu-sandbox.setu.co",
   accessToken: process.env.AA_ACCESS_TOKEN,
-  productInstanceId: process.env.AA_PRODUCT_INSTANCE_ID
+  productInstanceId: process.env.AA_PRODUCT_INSTANCE_ID,
+  clientId: process.env.AA_CLIENT_ID,
+  clientSecret: process.env.AA_CLIENT_SECRET
 };
 
 export function setuAaCredentialStatus() {
   const missing = [];
-  if (!setuConfig.accessToken) missing.push("AA_ACCESS_TOKEN");
+  if (!setuConfig.accessToken && !(setuConfig.clientId && setuConfig.clientSecret)) missing.push("AA_ACCESS_TOKEN or AA_CLIENT_ID + AA_CLIENT_SECRET");
   if (!setuConfig.productInstanceId) missing.push("AA_PRODUCT_INSTANCE_ID");
   return {
     provider: "setu",
-    mode: railAdapterMode(),
+    mode: setuMode(),
     baseUrl: setuConfig.sandboxBaseUrl,
     missing
   };
@@ -73,87 +78,8 @@ export async function getSetuCashflowAttestation(sessionId) {
   return normalizeSetuCashflowAttestation(session);
 }
 
-export function normalizeSetuConsent(input) {
-  return {
-    provider: "setu",
-    id: input.id,
-    status: input.status,
-    url: input.url,
-    redirectUrl: input.redirectUrl ?? input.url,
-    traceId: input.traceId ?? null,
-    detail: {
-      vua: input.detail?.vua ?? null,
-      purpose: input.detail?.purpose?.text ?? null,
-      purposeCode: input.detail?.purpose?.code ?? null,
-      fiTypes: input.detail?.fiTypes ?? [],
-      dataRange: input.detail?.dataRange ?? null,
-      consentTypes: input.detail?.consentTypes ?? []
-    }
-  };
-}
-
-export function normalizeSetuNotification(input) {
-  return {
-    provider: "setu",
-    eventType: input.eventType ?? input.type ?? "consent.notification",
-    consentId: input.consentId ?? input.id ?? input.consent?.id ?? null,
-    status: input.status ?? input.consent?.status ?? null,
-    traceId: input.traceId ?? null,
-    receivedAt: new Date().toISOString(),
-    raw: input
-  };
-}
-
-export function normalizeSetuDataSession(input) {
-  return {
-    provider: "setu",
-    id: input.id,
-    consentId: input.consentId ?? null,
-    status: input.status,
-    format: input.format ?? "json",
-    dataRange: input.dataRange ?? null,
-    traceId: input.traceId ?? null,
-    fips: input.fips ?? input.fiData ?? []
-  };
-}
-
-export function normalizeSetuCashflowAttestation(session) {
-  if (!session?.id) {
-    throw new Error("Setu data session is missing an id");
-  }
-
-  if (!["PARTIAL", "COMPLETED"].includes(session.status)) {
-    throw new Error(`Setu data session ${session.id} is not ready: ${session.status ?? "unknown"}`);
-  }
-
-  const accounts = collectAccounts(session.fips);
-  const transactions = accounts.flatMap((account) => collectTransactions(account.data ?? account.decryptedFI ?? account));
-  const credits = transactions.filter((transaction) => isCredit(transaction));
-  const inflow90d = credits.reduce((sum, transaction) => sum + transactionAmount(transaction), 0);
-  const balances = accounts.map(accountBalance).filter(Number.isFinite);
-
-  return {
-    rail: "AA",
-    inflow90d,
-    averageDailyBalance: balances.length ? balances.reduce((sum, value) => sum + value, 0) / balances.length : 0,
-    volatility: calculateVolatility(transactions),
-    consent: {
-      id: session.consentId,
-      purpose: "working-capital-affordability",
-      expiresInDays: null,
-      status: "purpose-bound"
-    },
-    source: {
-      provider: "setu",
-      sessionId: session.id,
-      status: session.status,
-      traceId: session.traceId
-    }
-  };
-}
-
 async function setuRequest(path, options) {
-  const mode = railAdapterMode();
+  const mode = setuMode();
   if (mode !== "mock-http" && mode !== "sandbox" && mode !== "prod") {
     return mockSetuRequest(path, options);
   }
@@ -163,6 +89,10 @@ async function setuRequest(path, options) {
     if (credentialStatus.missing.length > 0) {
       throw new Error(`Setu credentials are missing: ${credentialStatus.missing.join(", ")}`);
     }
+  }
+
+  if (mode === "sandbox" || mode === "prod") {
+    return gateway.request(path, options);
   }
 
   const body = await fetchRailJson(path, {
@@ -213,6 +143,25 @@ function buildConsentPayload(input) {
   const now = new Date();
   const from = new Date(now);
   from.setDate(from.getDate() - Number(input.lookbackDays ?? 90));
+
+  if (setuMode() === "sandbox") {
+    const vua = input.vua ?? input.customerMobile;
+    if (!vua) throw new Error("A test mobile number or VUA is required for sandbox consent");
+    return {
+      vua,
+      consentDuration: { unit: "DAY", value: "1" },
+      consentMode: "STORE",
+      fetchType: "ONETIME",
+      consentTypes: ["SUMMARY", "TRANSACTIONS"],
+      fiTypes: ["DEPOSIT"],
+      purpose: { code: "105", refUri: "https://api.rebit.org.in/aa/purpose/105.xml", text: "Explicit one-time consent for accessing data from the accounts", category: { type: "string" } },
+      frequency: { unit: "DAY", value: 1 },
+      dataLife: { unit: "DAY", value: 1 },
+      dataRange: { from: input.dataRange?.from ?? from.toISOString(), to: input.dataRange?.to ?? now.toISOString() },
+      context: [{ key: "fipId", value: "setu-fip-2" }, { key: "purposeCode", value: "105" }],
+      redirectUrl: input.redirectUrl ?? process.env.AA_REDIRECT_URL
+    };
+  }
 
   return {
     consentDuration: {
@@ -301,52 +250,9 @@ function buildMockSession(body) {
   };
 }
 
-function collectAccounts(fips) {
-  return (Array.isArray(fips) ? fips : []).flatMap((fip) => {
-    const accounts = fip.accounts ?? fip.data ?? [];
-    return Array.isArray(accounts) ? accounts : [];
-  });
+
+function setuMode() {
+  return process.env.AA_ADAPTER_MODE ?? railAdapterMode();
 }
 
-function collectTransactions(value) {
-  if (!value || typeof value !== "object") return [];
-  if (Array.isArray(value)) return value.flatMap(collectTransactions);
-
-  const transactions = value.transactions?.transaction ?? value.transactions?.transactions ?? value.transactions;
-  if (Array.isArray(transactions)) return transactions;
-  if (Array.isArray(value.transaction)) return value.transaction;
-  return [];
-}
-
-function transactionAmount(transaction) {
-  const value = transaction.amount ?? transaction.transactionAmount ?? transaction.depositAmount ?? 0;
-  const amount = Number(value);
-  return Number.isFinite(amount) ? Math.abs(amount) : 0;
-}
-
-function isCredit(transaction) {
-  const type = String(transaction.transactionType ?? transaction.type ?? transaction.mode ?? "").toUpperCase();
-  if (type) {
-    return ["CREDIT", "CR", "DEPOSIT", "INFLOW"].includes(type);
-  }
-  return Number(transaction.amount) > 0;
-}
-
-function accountBalance(account) {
-  const summary = account.data?.summary ?? account.decryptedFI?.summary ?? account.summary ?? {};
-  const value = summary.currentBalance ?? summary.balance ?? summary.availableBalance;
-  const balance = Number(value);
-  return Number.isFinite(balance) ? balance : Number.NaN;
-}
-
-function calculateVolatility(transactions) {
-  if (transactions.length < 3) return "unknown";
-  const amounts = transactions.map(transactionAmount).filter((amount) => amount > 0);
-  if (amounts.length < 3) return "unknown";
-  const mean = amounts.reduce((sum, amount) => sum + amount, 0) / amounts.length;
-  const variance = amounts.reduce((sum, amount) => sum + (amount - mean) ** 2, 0) / amounts.length;
-  const coefficientOfVariation = Math.sqrt(variance) / mean;
-  if (coefficientOfVariation < 0.35) return "low";
-  if (coefficientOfVariation < 0.8) return "moderate";
-  return "high";
-}
+const gateway = createSetuGateway(process.env);

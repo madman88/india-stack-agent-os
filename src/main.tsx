@@ -109,6 +109,7 @@ type AaState = {
   businessId: string;
   provider: "setu";
   credentialStatus: {
+    mode?: string;
     baseUrl: string;
     missing: string[];
   };
@@ -116,7 +117,7 @@ type AaState = {
     id: string;
     status: string;
     url: string;
-    detail?: { consentTypes?: string[]; [key: string]: unknown };
+    detail?: { consentTypes?: string[]; dataRange?: { from: string; to: string } | null; [key: string]: unknown };
     traceId?: string | null;
   };
   latestSession: null | {
@@ -558,9 +559,31 @@ export function App() {
   }
 
   async function refreshAaState() {
+    try {
     const response = await apiFetch("/v1/rails/aa/state?businessId=ravi-stores");
     if (!response.ok) throw new Error(`aa state ${response.status}`);
-    setAaState((await response.json()) as AaState);
+    const state = (await response.json()) as AaState;
+    setAaState(state);
+    if (state.credentialStatus.mode === "sandbox" && state.latestConsent) {
+      setAaSelectedConsentId(state.latestConsent.id);
+      const range = state.latestConsent.detail?.dataRange;
+      setAaDraft((current) => ({ ...current, ...(range ? { dataFrom: range.from, dataTo: range.to } : {}) }));
+    }
+    if (state.credentialStatus.mode === "sandbox" && state.latestSession?.id) {
+      const session = state.latestSession;
+      const cashflowResponse = await apiFetch(`/v1/rails/aa/sessions/${session.id}/cashflow`);
+      const cashflow = cashflowResponse.ok ? await cashflowResponse.json() : null;
+      setAaSessions((current) => [{
+        recordId: session.id, businessId: scenario.business.id, consentId: session.consentId ?? "",
+        sessionId: session.id, createdAt: new Date().toISOString(),
+        dataFrom: session.dataRange?.from ?? "", dataTo: session.dataRange?.to ?? "",
+        status: session.status, cashflowInflow90d: cashflow?.inflow90d ?? null,
+        averageDailyBalance: cashflow?.averageDailyBalance ?? null
+      }, ...current.filter((item) => item.sessionId !== session.id)].slice(0, 20));
+    }
+    } catch {
+      setAaStatus("Could not refresh sandbox state. Check your access key and retry.");
+    }
   }
 
   async function createAaConsent() {
@@ -645,7 +668,10 @@ export function App() {
         })
       });
 
-      if (!response.ok) throw new Error(`aa session ${response.status}`);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message ?? `AA session request failed (${response.status})`);
+      }
       const session = (await response.json()) as AaState["latestSession"];
       let cashflowInflow90d: number | null = null;
       let averageDailyBalance: number | null = null;
@@ -684,9 +710,9 @@ export function App() {
       setApiMode("mock-api");
       setAaStatus(`Session created: ${session?.id ?? "unknown"}${cashflowInflow90d ? ` · inflow Rs ${cashflowInflow90d.toLocaleString("en-IN")}` : ""}`);
       await refreshAaState();
-    } catch {
+    } catch (error) {
       setApiMode("fallback");
-      setAaStatus("Session creation failed. Check the demo API output or refresh the page.");
+      setAaStatus(error instanceof Error ? error.message : "Session creation failed. Refresh and try again.");
     } finally {
       setAaBusy("idle");
     }
@@ -1000,7 +1026,7 @@ function OwnerConsole({
           </div>
           <div className="aa-chip">
             <span>Missing creds</span>
-            <strong>{aaState?.credentialStatus.missing.length ? aaState.credentialStatus.missing.join(", ") : "none for mock"}</strong>
+            <strong>{aaState?.credentialStatus.missing.length ? aaState.credentialStatus.missing.join(", ") : aaState?.credentialStatus.mode === "sandbox" ? "connected to sandbox" : "none for mock"}</strong>
           </div>
           <div className="aa-chip">
             <span>Ready for session</span>
@@ -1044,6 +1070,11 @@ function OwnerConsole({
         </div>
 
         <div className="aa-actions">
+          <button className="secondary-button" onClick={() => {
+            const key = window.prompt("Enter your private sandbox access key");
+            if (key) { sessionStorage.setItem("isao.aaAccessKey", key); window.location.reload(); }
+          }}>Open private sandbox</button>
+          {aaState?.latestConsent?.url && <a className="secondary-button" href={aaState.latestConsent.url} target="_blank" rel="noopener noreferrer">Review consent in Setu</a>}
           <button className="primary-button" onClick={createAaConsent} disabled={aaBusy !== "idle"}>
             <Check size={18} aria-hidden="true" />
             Create consent
@@ -1606,6 +1637,11 @@ function ControlItem({ label, status }: { label: string; status: string }) {
 }
 
 const rootElement = document.getElementById("root");
+const sandboxKey = new URLSearchParams(window.location.hash.slice(1)).get("aa-access");
+if (sandboxKey) {
+  sessionStorage.setItem("isao.aaAccessKey", sandboxKey);
+  window.history.replaceState(null, "", window.location.pathname + window.location.search);
+}
 if (rootElement) {
   createRoot(rootElement).render(<App />);
 }
@@ -1613,5 +1649,11 @@ if (rootElement) {
 function apiFetch(path: string, init?: RequestInit) {
   const apiOrigin = (import.meta as unknown as { env?: { VITE_API_ORIGIN?: string } }).env?.VITE_API_ORIGIN ?? "http://localhost:8787";
   const proxyUrl = path.startsWith("/v1") ? path : `/v1${path}`;
-  return fetch(proxyUrl, init).catch(async () => fetch(new URL(proxyUrl, apiOrigin), init));
+  const key = sessionStorage.getItem("isao.aaAccessKey");
+  const headers = new Headers(init?.headers);
+  if (key && path.startsWith("/v1/rails/aa/")) headers.set("x-aa-sandbox-key", key);
+  const options = { ...init, headers };
+  // Keep sandbox credentials on this origin; never forward them on a fallback.
+  if (headers.has("x-aa-sandbox-key")) return fetch(proxyUrl, options);
+  return fetch(proxyUrl, options).catch(async () => fetch(new URL(proxyUrl, apiOrigin), options));
 }

@@ -24,8 +24,9 @@
     "test:integration": "node scripts/integration-test.mjs",
     "test:rails-http": "API_BASE_URL=http://localhost:9791 node scripts/rail-http-smoke.mjs",
     "test:setu-aa": "node scripts/setu-aa-smoke.mjs",
+    "test:setu-security": "node scripts/setu-sandbox-security-smoke.mjs",
     "test:sites-worker": "node scripts/sites-worker-smoke.mjs",
-    "test": "npm run test:fixtures && npm run test:adapters && npm run test:aa-math && npm run test:integration && npm run test:rails-http && npm run test:setu-aa && npm run test:components && npm run build && npm run test:sites-worker"
+    "test": "npm run test:fixtures && npm run test:adapters && npm run test:aa-math && npm run test:integration && npm run test:rails-http && npm run test:setu-aa && npm run test:setu-security && npm run test:components && npm run build && npm run test:sites-worker"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.953.0",
