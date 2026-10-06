@@ -124,6 +124,8 @@ Docker Compose sets `MOCK_RAILS_BASE_URL=http://mock-rails:8790`, which routes a
 
 Do not wire real AA, ONDC, GSTN, OCEN, UPI, DigiLocker, or Finternet services directly into frontend code. Add or replace adapter implementations under `services/` and keep the `/v1` contract stable.
 
+Production AWS infrastructure lives in `infra/terraform/aws`; see `docs/production-infrastructure.md` before applying it to a real account.
+
 Every real adapter should support:
 
 - deterministic contract tests with recorded or sandbox responses

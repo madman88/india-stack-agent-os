@@ -13,6 +13,7 @@
     "build": "tsc -b && vite build && node scripts/prepare-sites-build.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "sandbox:aa:check": "node scripts/aa-sandbox-preflight.mjs",
+    "tf:validate": "terraform -chdir=infra/terraform/localstack init -backend=false && terraform -chdir=infra/terraform/localstack fmt -check && terraform -chdir=infra/terraform/localstack validate && terraform -chdir=infra/terraform/aws init -backend=false && terraform -chdir=infra/terraform/aws fmt -check && terraform -chdir=infra/terraform/aws validate",
     "test:aa-math": "node scripts/aa-cashflow-math-smoke.mjs",
     "test:adapters": "node scripts/adapter-contract-smoke.mjs",
     "test:components": "vitest run --environment jsdom",

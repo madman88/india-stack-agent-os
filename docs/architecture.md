@@ -81,3 +81,6 @@ The worker consumes SQS messages, writes event-derived proof events, and records
 Local runs the same frontend and API contract as production. LocalStack is used for AWS-shaped dependencies, and `mock-rails` stands in for regulated rail HTTP services until real credentials or partner sandboxes exist.
 
 The invariant: callers do not know whether they are talking to a mock adapter or real rail adapter.
+
+Production AWS infrastructure is defined separately in `infra/terraform/aws`.
+Use `docs/production-infrastructure.md` for the first real account apply.
