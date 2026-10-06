@@ -16,14 +16,19 @@ const defaultConfig = {
 };
 
 function createDocumentClient(config) {
-  const client = new DynamoDBClient({
+  const clientConfig = {
     region: config.region,
-    endpoint: config.endpoint,
-    credentials: {
+    endpoint: config.endpoint
+  };
+
+  if (config.endpoint || (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY)) {
+    clientConfig.credentials = {
       accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "test",
       secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "test"
-    }
-  });
+    };
+  }
+
+  const client = new DynamoDBClient(clientConfig);
 
   return DynamoDBDocumentClient.from(client);
 }
