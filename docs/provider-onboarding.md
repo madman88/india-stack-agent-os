@@ -26,12 +26,30 @@ and cashflow when ready. Private pilot state is read on demand; demo audit logs
 are not an authenticated provider event ledger.
 
 Callbacks are disabled for this pilot until sender authentication is implemented.
-Consent and session status are checked by polling Setu. The rest of the app,
-including its working-capital recommendation, remains a simulation.
+Consent and session status are checked by polling Setu. The private workspace
+calculates a working-capital estimate from the latest completed Setu statement.
+Demand, compliance, lender offers and proof events remain simulated. The private
+workspace disables approval/execution both in the UI and at the API.
+
+Sandbox policy `sandbox-net-inflow-v1` allocates 25% of net inflows projected to
+45 days, multiplied by 1 / 0.75 / 0.5 for low / moderate / high volatility.
+After the simulated APR and fee, principal is capped by the simulated Rs 72,000
+restock target and offer limit, then rounded down to Rs 1,000. Negative net
+inflows, incomplete data, or insufficient fee coverage produce a zero estimate.
+This illustrative policy does not account for existing debts, tax or future
+sales changes and is not a lender underwriting model.
+
+The source requires active unexpired consent, a completed session belonging to
+that consent, approved dates and a statement ending within the past seven days.
+The policy requires at least 30 days, dated transactions and valid amounts/types.
+No fixture cashflow is substituted when the source is unavailable. The UI labels
+reported balances accurately; `averageDailyBalance` remains a deprecated API
+compatibility field.
 
 For local Node testing, use `AA_ADAPTER_MODE=sandbox` with
 `RAIL_ADAPTER_MODE=fixture` to switch only the consent/session client to Setu.
-The working-capital AA adapter still requires separate wiring to a real session.
+Set `AA_SANDBOX_CONSENT_ID` to the approved consent ID. The working-capital adapter
+reads its latest completed session; the default pilot business is `ravi-stores`.
 The preflight now calls the authenticated FIP endpoint, rather than a root URL.
 Security/token-refresh checks: `npm run test:setu-security`.
 

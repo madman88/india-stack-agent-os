@@ -2,15 +2,17 @@ import { readCashflowAttestation } from "../adapters/account-aggregator.mjs";
 import { readComplianceAttestation } from "../adapters/gstn.mjs";
 import { discoverCreditOffers } from "../adapters/ocen.mjs";
 import { readDemandSignals } from "../adapters/ondc.mjs";
+import { evaluateWorkingCapital } from "../../shared/working-capital.mjs";
 
 export async function createWorkingCapitalDecision(businessId) {
   const [cashflow, demand, compliance, loanOffers] = await Promise.all([
-    readCashflowAttestation(),
+    readCashflowAttestation(businessId),
     readDemandSignals(),
     readComplianceAttestation(),
     discoverCreditOffers()
   ]);
   const selectedOffer = loanOffers[0];
+  if (cashflow.source?.provider === "setu") return evaluateWorkingCapital(businessId, cashflow, selectedOffer, { demand, compliance, loanOffers });
 
   return {
     businessId,

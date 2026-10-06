@@ -34,6 +34,12 @@ import "./styles.css";
 type Rail = "AA" | "ONDC" | "GSTN" | "OCEN" | "UPI" | "DigiLocker" | "Finternet" | "BBPS";
 type View = "owner" | "partner";
 type ActionState = "pending" | "approved" | "rejected";
+type SandboxDecision = {
+  mode: "aa-sandbox";
+  recommendation: { amount: number; reason: string; status: "review" | "hold"; repaymentCapDays: number };
+  calculation?: { netInflow: number; reportedBalance: number | null; repaymentBudget: number; estimatedRepayment: number };
+  evidence?: { cashflow?: { inflow90d: number; outflow90d: number; source: { sessionId: string } } };
+};
 
 type InventoryItem = {
   sku: string;
@@ -360,6 +366,9 @@ function toIsoValue(localValue: string) {
 }
 
 export function App() {
+  const privateSandbox = Boolean(sessionStorage.getItem("isao.aaAccessKey"));
+  const [sandboxDecision, setSandboxDecision] = useState<SandboxDecision | null>(null);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
   const [view, setView] = useState<View>("owner");
   const [actionState, setActionState] = useState<ActionState>("pending");
   const [scenario, setScenario] = useState<Scenario>(fallbackScenario);
@@ -382,7 +391,7 @@ export function App() {
   );
   const [aaSelectedConsentId, setAaSelectedConsentId] = useState<string>(() => localStorage.getItem(aaSelectionStorageKey) ?? "");
   const [proofs, setProofs] = useState<ProofEvent[]>(initialProofs);
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>(privateSandbox ? [] : initialMessages);
   const [draft, setDraft] = useState("");
 
   useEffect(() => {
@@ -397,7 +406,7 @@ export function App() {
         if (cancelled) return;
         setScenario(snapshot);
         setProofs(snapshot.proofs);
-        setMessages(snapshot.messages);
+        if (!privateSandbox) setMessages(snapshot.messages);
         setApiMode("mock-api");
       })
       .catch(() => {
@@ -410,11 +419,14 @@ export function App() {
       .then((state) => {
         if (cancelled) return;
         setAaState(state as AaState);
+        adoptSandboxConsent(state as AaState);
       })
       .catch(() => {
         if (cancelled) return;
         setAaState(null);
       });
+
+    if (privateSandbox) void refreshDecision();
 
     return () => {
       cancelled = true;
@@ -441,6 +453,11 @@ export function App() {
   const verifiedCount = proofs.filter((proof) => proof.status === "verified").length;
 
   const recommendation = useMemo(() => {
+    if (privateSandbox) return {
+      label: sandboxDecision?.recommendation.status === "review" ? "Sandbox estimate for review" : "Estimate on hold",
+      detail: decisionError ?? sandboxDecision?.recommendation.reason ?? "Reading your approved AA statement…",
+      tone: sandboxDecision?.recommendation.status === "review" ? "warn" : "danger"
+    };
     if (actionState === "approved") {
       return {
         label: "Approved for execution",
@@ -462,7 +479,27 @@ export function App() {
       detail: "The agent can execute after owner approval. No irreversible action has been taken.",
       tone: "warn"
     };
-  }, [actionState]);
+  }, [actionState, privateSandbox, sandboxDecision, decisionError]);
+
+  async function refreshDecision() {
+    setSandboxDecision(null);
+    setDecisionError(null);
+    setMessages([{ id: Date.now(), from: "agent", text: "Refreshing the estimate from the approved AA statement…", meta: "AA sandbox" }]);
+    try {
+      const response = await apiFetch("/v1/decisions/working-capital", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ businessId: "ravi-stores" })
+      });
+      const decision = await response.json();
+      if (!response.ok || decision.mode !== "aa-sandbox") throw new Error("Could not verify the sandbox estimate. Check your private access link and refresh.");
+      setSandboxDecision(decision);
+      setMessages([{ id: Date.now(), from: "agent", text: decision.recommendation.reason, meta: "Setu dummy bank data · simulated demand and offers" }]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Sandbox estimate is unavailable.";
+      setDecisionError(message);
+      setMessages([{ id: Date.now(), from: "agent", text: message, meta: "Estimate on hold" }]);
+    }
+  }
 
   async function submitApproval(action: "approve" | "reject") {
     try {
@@ -497,6 +534,7 @@ export function App() {
   }
 
   async function approveAction() {
+    if (privateSandbox) return;
     if (actionState === "approved") return;
     const usedApi = await submitApproval("approve");
     if (usedApi) return;
@@ -526,6 +564,7 @@ export function App() {
   }
 
   async function rejectAction() {
+    if (privateSandbox) return;
     if (actionState === "rejected") return;
     const usedApi = await submitApproval("reject");
     if (usedApi) return;
@@ -553,6 +592,7 @@ export function App() {
   }
 
   function resetScenario() {
+    if (privateSandbox) { void refreshAaState(); return; }
     setActionState("pending");
     setProofs(scenario.proofs);
     setMessages(scenario.messages);
@@ -564,11 +604,7 @@ export function App() {
     if (!response.ok) throw new Error(`aa state ${response.status}`);
     const state = (await response.json()) as AaState;
     setAaState(state);
-    if (state.credentialStatus.mode === "sandbox" && state.latestConsent) {
-      setAaSelectedConsentId(state.latestConsent.id);
-      const range = state.latestConsent.detail?.dataRange;
-      setAaDraft((current) => ({ ...current, ...(range ? { dataFrom: range.from, dataTo: range.to } : {}) }));
-    }
+    adoptSandboxConsent(state);
     if (state.credentialStatus.mode === "sandbox" && state.latestSession?.id) {
       const session = state.latestSession;
       const cashflowResponse = await apiFetch(`/v1/rails/aa/sessions/${session.id}/cashflow`);
@@ -584,9 +620,31 @@ export function App() {
     } catch {
       setAaStatus("Could not refresh sandbox state. Check your access key and retry.");
     }
+    if (privateSandbox) await refreshDecision();
+  }
+
+  function adoptSandboxConsent(state: AaState) {
+    if (state.credentialStatus.mode !== "sandbox" || !state.latestConsent) return;
+    setAaSelectedConsentId(state.latestConsent.id);
+    const detail = state.latestConsent.detail;
+    const range = detail?.dataRange;
+    const vua = typeof detail?.vua === "string" ? detail.vua : null;
+    setAaDraft((current) => ({ ...current,
+      customerName: "Sandbox test account",
+      ...(vua ? { vua, customerMobile: vua.split("@")[0] } : {}),
+      ...(typeof detail?.purposeCode === "string" ? { purposeCode: detail.purposeCode } : {}),
+      ...(typeof detail?.purpose === "string" ? { purposeText: detail.purpose } : {}),
+      ...(detail?.consentTypes ? { consentTypes: detail.consentTypes.join(",") } : {}),
+      ...(range ? { dataFrom: range.from, dataTo: range.to } : {})
+    }));
   }
 
   async function createAaConsent() {
+    if (privateSandbox) {
+      await refreshAaState();
+      setAaStatus("Using your existing Setu sandbox consent.");
+      return;
+    }
     setAaBusy("creating-consent");
     setAaStatus(null);
     try {
@@ -719,6 +777,7 @@ export function App() {
   }
 
   function fallbackAgentAnswer(text: string) {
+    if (privateSandbox) return sandboxDecision?.recommendation.reason ?? decisionError ?? "The AA sandbox estimate is unavailable. Refresh to retry.";
     const lower = text.toLowerCase();
     if (lower.includes("why")) {
       return "Because expected gross margin is Rs 10,900, repayment cost is Rs 1,310, and the stockout risk affects three high-velocity SKUs.";
@@ -802,7 +861,7 @@ export function App() {
                 <Icon size={17} aria-hidden="true" />
                 <div>
                   <span>{item.rail}</span>
-                  <strong>{item.value}</strong>
+                  <strong>{privateSandbox ? item.rail === "AA" ? sandboxDecision?.evidence?.cashflow ? `Rs ${sandboxDecision.evidence.cashflow.inflow90d.toLocaleString("en-IN")} credits` : "Statement pending" : `${item.value} · demo` : item.value}</strong>
                 </div>
               </div>
             );
@@ -817,18 +876,22 @@ export function App() {
             <h1>{view === "owner" ? "Operator Console" : "Partner Risk Console"}</h1>
           </div>
           <div className="topbar-actions">
-            <button className="icon-button" onClick={resetScenario} aria-label="Reset scenario" title="Reset scenario">
+            <button className="icon-button" onClick={resetScenario} aria-label={privateSandbox ? "Refresh estimate" : "Reset scenario"} title={privateSandbox ? "Refresh estimate" : "Reset scenario"}>
               <RefreshCw size={18} aria-hidden="true" />
             </button>
-            <div className="api-pill">{apiMode}</div>
+            <div className="api-pill">{privateSandbox ? "AA sandbox" : apiMode}</div>
             <div className={`status-pill ${recommendation.tone}`}>{recommendation.label}</div>
           </div>
         </header>
+
+        {privateSandbox && <div className="aa-banner">AA evidence uses Setu sandbox dummy data. Inventory, lender offers, partner scores and proof events remain simulated.</div>}
 
         {view === "owner" ? (
           <OwnerConsole
             actionState={actionState}
             recommendation={recommendation}
+            privateSandbox={privateSandbox}
+            sandboxDecision={sandboxDecision}
             messages={messages}
             draft={draft}
             setDraft={setDraft}
@@ -875,6 +938,8 @@ export function App() {
 function OwnerConsole({
   actionState,
   recommendation,
+  privateSandbox,
+  sandboxDecision,
   messages,
   draft,
   setDraft,
@@ -899,6 +964,8 @@ function OwnerConsole({
 }: {
   actionState: ActionState;
   recommendation: { label: string; detail: string; tone: string };
+  privateSandbox: boolean;
+  sandboxDecision: SandboxDecision | null;
   messages: ChatMessage[];
   draft: string;
   setDraft: (value: string) => void;
@@ -927,19 +994,19 @@ function OwnerConsole({
         <div className="panel-header">
           <div>
             <span className="section-label">Agent recommendation</span>
-            <h2>Restock before weekend demand</h2>
+            <h2>{privateSandbox ? "Restock estimate from bank cashflow" : "Restock before weekend demand"}</h2>
           </div>
           <div className="confidence">
             <Sparkles size={18} aria-hidden="true" />
-            91 confidence
+            {privateSandbox ? "Sandbox policy" : "91 confidence"}
           </div>
         </div>
 
         <div className="decision-flow" aria-label="Decision flow">
-          <FlowStep icon={ShoppingCart} rail="ONDC" title="Demand spike" detail="Grocery searches and orders up 31% locally." />
-          <FlowStep icon={DatabaseZap} rail="AA" title="Affordability" detail="45-day repayment fits cashflow buffer." />
-          <FlowStep icon={Landmark} rail="OCEN" title="Credit match" detail="Pragati NBFC is cheapest risk-adjusted offer." />
-          <FlowStep icon={ShieldCheck} rail="Finternet" title="Proof chain" detail="Approval, PO, and mandate become auditable events." />
+          <FlowStep icon={ShoppingCart} rail="ONDC" title="Demand spike" detail={privateSandbox ? "Simulated restock target: Rs 72,000." : "Grocery searches and orders up 31% locally."} />
+          <FlowStep icon={DatabaseZap} rail="AA" title="Affordability" detail={privateSandbox ? "Credits and debits from your Setu dummy statement." : "45-day repayment fits cashflow buffer."} />
+          <FlowStep icon={Landmark} rail="OCEN" title="Credit match" detail={privateSandbox ? "Simulated offer: 16.8% APR and Rs 680 fee." : "Pragati NBFC is cheapest risk-adjusted offer."} />
+          <FlowStep icon={ShieldCheck} rail="Finternet" title="Proof chain" detail={privateSandbox ? "Review only. Loan and payment execution disabled." : "Approval, PO, and mandate become auditable events."} />
         </div>
 
         <div className={`recommendation-strip ${recommendation.tone}`}>
@@ -953,11 +1020,11 @@ function OwnerConsole({
         <div className="action-grid">
           <div className="amount-block">
             <span>Recommended restock</span>
-            <strong>Rs 72,000</strong>
+            <strong>{privateSandbox ? sandboxDecision ? `Rs ${sandboxDecision.recommendation.amount.toLocaleString("en-IN")}` : "Awaiting bank data" : "Rs 72,000"}</strong>
           </div>
           <div className="amount-block">
-            <span>Expected gross margin</span>
-            <strong>Rs 10,900</strong>
+            <span>{privateSandbox ? "Estimated repayment, simulated offer" : "Expected gross margin"}</span>
+            <strong>{privateSandbox ? sandboxDecision?.calculation ? `Rs ${sandboxDecision.calculation.estimatedRepayment.toLocaleString("en-IN")}` : "Unavailable" : "Rs 10,900"}</strong>
           </div>
           <div className="amount-block">
             <span>Repayment cap</span>
@@ -965,12 +1032,21 @@ function OwnerConsole({
           </div>
         </div>
 
+        {privateSandbox && sandboxDecision?.evidence?.cashflow && <div className="aa-summary">
+          <div className="aa-chip"><span>Statement credits</span><strong>Rs {sandboxDecision.evidence.cashflow.inflow90d.toLocaleString("en-IN")}</strong></div>
+          <div className="aa-chip"><span>Statement debits</span><strong>Rs {sandboxDecision.evidence.cashflow.outflow90d.toLocaleString("en-IN")}</strong></div>
+          <div className="aa-chip"><span>Net inflows</span><strong>Rs {sandboxDecision.calculation?.netInflow.toLocaleString("en-IN")}</strong></div>
+          <div className="aa-chip"><span>Reported account balance</span><strong>{sandboxDecision.calculation?.reportedBalance != null ? `Rs ${sandboxDecision.calculation.reportedBalance.toLocaleString("en-IN")}` : "Unavailable"}</strong></div>
+          <small>Setu sandbox dummy data. The estimate uses 25% of projected 45-day net inflows, adjusted for volatility and simulated borrowing costs. It excludes existing debts, taxes and future sales changes.</small>
+          <small>Bank session: {sandboxDecision.evidence.cashflow.source.sessionId}</small>
+        </div>}
+
         <div className="button-row">
-          <button className="primary-button" onClick={approveAction} disabled={actionState === "approved"}>
+          <button className="primary-button" onClick={approveAction} disabled={privateSandbox || actionState === "approved"}>
             <Check size={18} aria-hidden="true" />
-            Approve
+            {privateSandbox ? "Execution disabled in sandbox" : "Approve"}
           </button>
-          <button className="secondary-button" onClick={rejectAction} disabled={actionState === "rejected"}>
+          <button className="secondary-button" onClick={rejectAction} disabled={privateSandbox || actionState === "rejected"}>
             <X size={18} aria-hidden="true" />
             Reject
           </button>
@@ -1010,7 +1086,7 @@ function OwnerConsole({
         <div className="panel-header compact">
           <div>
             <span className="section-label">AA sandbox workspace</span>
-            <h2>Editable consent and session prep</h2>
+            <h2>{privateSandbox ? "Approved sandbox consent" : "Editable consent and session prep"}</h2>
           </div>
           <DatabaseZap size={20} aria-hidden="true" />
         </div>
@@ -1034,7 +1110,7 @@ function OwnerConsole({
           </div>
         </div>
 
-        <div className="aa-form-grid">
+        <fieldset className="aa-form-grid" disabled={privateSandbox} style={{ border: 0, padding: 0, margin: 0 }}>
           <label className="aa-field">
             <span>Customer name</span>
             <input value={aaDraft.customerName} onChange={(event) => setAaDraft((current) => ({ ...current, customerName: event.target.value }))} />
@@ -1067,7 +1143,7 @@ function OwnerConsole({
             <span>Consent types, comma separated</span>
             <input value={aaDraft.consentTypes} onChange={(event) => setAaDraft((current) => ({ ...current, consentTypes: event.target.value }))} />
           </label>
-        </div>
+        </fieldset>
 
         <div className="aa-actions">
           <button className="secondary-button" onClick={() => {
@@ -1077,7 +1153,7 @@ function OwnerConsole({
           {aaState?.latestConsent?.url && <a className="secondary-button" href={aaState.latestConsent.url} target="_blank" rel="noopener noreferrer">Review consent in Setu</a>}
           <button className="primary-button" onClick={createAaConsent} disabled={aaBusy !== "idle"}>
             <Check size={18} aria-hidden="true" />
-            Create consent
+            {privateSandbox ? "Refresh consent" : "Create consent"}
           </button>
           <button className="secondary-button" onClick={createAaSession} disabled={aaBusy !== "idle" || !(aaSelectedConsentId || aaState?.latestConsent?.id)}>
             <ArrowRight size={18} aria-hidden="true" />
@@ -1651,7 +1727,7 @@ function apiFetch(path: string, init?: RequestInit) {
   const proxyUrl = path.startsWith("/v1") ? path : `/v1${path}`;
   const key = sessionStorage.getItem("isao.aaAccessKey");
   const headers = new Headers(init?.headers);
-  if (key && path.startsWith("/v1/rails/aa/")) headers.set("x-aa-sandbox-key", key);
+  if (key && (path.startsWith("/v1/rails/aa/") || ["/v1/decisions/working-capital", "/v1/agent/messages", "/v1/approvals"].includes(path))) headers.set("x-aa-sandbox-key", key);
   const options = { ...init, headers };
   // Keep sandbox credentials on this origin; never forward them on a fallback.
   if (headers.has("x-aa-sandbox-key")) return fetch(proxyUrl, options);

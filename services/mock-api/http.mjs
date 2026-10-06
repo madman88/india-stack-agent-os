@@ -117,6 +117,7 @@ export async function routeRequest({ method, pathname, searchParams, body = {} }
   }
 
   if (method === "POST" && pathname === "/v1/approvals") {
+    if (process.env.AA_ADAPTER_MODE === "sandbox") return { status: 409, body: { error: "preview_only", message: "Sandbox estimates are for review; execution is disabled." } };
     const approval = await captureApproval({ ...body, businessId: body.businessId ?? businessId });
     await repositories.putApproval(approval.businessId, approval);
     await repositories.appendProofEvents(approval.businessId, approval.proofsToPrepend);
@@ -129,6 +130,10 @@ export async function routeRequest({ method, pathname, searchParams, body = {} }
   }
 
   if (method === "POST" && pathname === "/v1/agent/messages") {
+    if (process.env.AA_ADAPTER_MODE === "sandbox") {
+      const decision = await createWorkingCapitalDecision(body.businessId ?? businessId);
+      return { status: 200, body: { message: decision.recommendation.reason, meta: "AA sandbox calculation" } };
+    }
     const verifiedCount = scenario.proofs.filter((proof) => proof.status === "verified").length;
     return {
       status: 200,

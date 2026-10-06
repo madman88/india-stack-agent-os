@@ -45,7 +45,34 @@ function pathOf(input: RequestInfo | URL) {
 describe("App AA workflow", () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     vi.useRealTimers();
+  });
+
+  it("shows a cashflow-derived sandbox amount and clears it when refresh fails", async () => {
+    sessionStorage.setItem("isao.aaAccessKey", "private-key");
+    let unavailable = false;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = pathOf(input);
+      if (path === "/v1/businesses/ravi-stores/snapshot") return jsonResponse(snapshot);
+      if (path === "/v1/rails/aa/state") return jsonResponse({ ...emptyAaState, credentialStatus: { ...emptyAaState.credentialStatus, mode: "sandbox" } });
+      if (path === "/v1/decisions/working-capital") {
+        expect(new Headers(init?.headers).get("x-aa-sandbox-key")).toBe("private-key");
+        if (unavailable) return jsonResponse({ error: "unavailable" }, 503);
+        return jsonResponse({ mode: "aa-sandbox", recommendation: { amount: 54000, status: "review", reason: "Estimate from net bank inflows.", repaymentCapDays: 45 }, calculation: { estimatedRepayment: 55800, reportedBalance: 30261.9, netInflow: 597606.92, repaymentBudget: 56025 }, evidence: { cashflow: { inflow90d: 1570466.57, outflow90d: 972859.65, source: { sessionId: "sandbox-session" } } } });
+      }
+      return jsonResponse({ error: "not_found" }, 404);
+    }));
+    render(<App />);
+    await screen.findByText("Rs 54,000");
+    expect(screen.getByRole("button", { name: "Execution disabled in sandbox" })).toBeDisabled();
+    expect(screen.getByText("Reported account balance")).toBeInTheDocument();
+    expect(screen.queryByText("I found a 2-day stockout risk.")).not.toBeInTheDocument();
+    unavailable = true;
+    await userEvent.click(screen.getByRole("button", { name: "Refresh AA state" }));
+    await waitFor(() => expect(screen.queryByText("Rs 54,000")).not.toBeInTheDocument());
+    await screen.findAllByText(/Could not verify the sandbox estimate/);
+    expect(screen.queryByText("Estimate from net bank inflows.")).not.toBeInTheDocument();
   });
 
   afterEach(() => {

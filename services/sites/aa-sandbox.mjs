@@ -1,5 +1,7 @@
 import { createSetuGateway } from "../shared/setu-aa-gateway.mjs";
 import { normalizeSetuConsent, normalizeSetuDataSession, normalizeSetuCashflowAttestation } from "../shared/setu-aa-normalizers.mjs";
+import { readApprovedAaCashflow } from "../shared/approved-aa-cashflow.mjs";
+import { evaluateWorkingCapital } from "../shared/working-capital.mjs";
 
 const clients = new WeakMap();
 function client(env) {
@@ -12,9 +14,12 @@ function json(body, status = 200) {
 
 // A single, pinned sandbox consent. Public visitors retain the simulated demo.
 // Poll Setu directly; callbacks are disabled until sender verification is configured.
-export async function handleAaSandbox(request, env = {}) {
+export async function handleAaSandbox(request, env = {}, scenario = {}) {
   const url = new URL(request.url);
-  if (env.AA_ADAPTER_MODE !== "sandbox" || !url.pathname.startsWith("/v1/rails/aa/")) return null;
+  const decisionPath = url.pathname === "/v1/decisions/working-capital";
+  const messagePath = url.pathname === "/v1/agent/messages";
+  const approvalPath = url.pathname === "/v1/approvals";
+  if (env.AA_ADAPTER_MODE !== "sandbox" || !(url.pathname.startsWith("/v1/rails/aa/") || decisionPath || messagePath || approvalPath)) return null;
   if (url.pathname.endsWith("/callback")) return json({ error: "sandbox_uses_polling" }, 503);
   const supplied = request.headers.get("x-aa-sandbox-key");
   if (!supplied) return null;
@@ -35,6 +40,21 @@ export async function handleAaSandbox(request, env = {}) {
   }
   const credentialStatus = { provider: "setu", mode: "sandbox", baseUrl: env.AA_BASE_URL ?? "https://fiu-sandbox.setu.co", missing: [] };
   try {
+    if (request.method === "POST" && approvalPath) return json({ error: "preview_only", message: "Sandbox estimates are for review; execution is disabled." }, 409);
+    if (request.method === "POST" && (decisionPath || messagePath)) {
+      const body = await request.json();
+      if (body.businessId && body.businessId !== "ravi-stores") return json({ error: "not_found" }, 404);
+      let decision;
+      try {
+        const cashflow = await readApprovedAaCashflow(gateway, consentId);
+        decision = evaluateWorkingCapital("ravi-stores", cashflow, scenario.loanOffers?.[0], {
+          demand: { rail: "ONDC", simulated: true }, compliance: { rail: "GSTN", simulated: true }, loanOffers: scenario.loanOffers ?? []
+        });
+      } catch (error) {
+        decision = { businessId: "ravi-stores", mode: "aa-sandbox", loanOffers: scenario.loanOffers ?? [], recommendation: { amount: 0, status: "hold", reason: `Hold: ${error.message}. No fixture cashflow was substituted.`, requiredApproval: true, repaymentCapDays: 45 }, provenance: { aa: "unavailable", offers: "simulated", execution: "disabled" } };
+      }
+      return json(messagePath ? { message: `${decision.recommendation.reason} This is a sandbox estimate using dummy bank data and simulated offers; execution is disabled.`, meta: "AA sandbox calculation" } : decision);
+    }
     if (request.method === "GET" && url.pathname.endsWith("/setu/preflight")) return json(credentialStatus);
     if (request.method === "GET" && url.pathname.endsWith("/state")) {
       const latestConsent = await consent();

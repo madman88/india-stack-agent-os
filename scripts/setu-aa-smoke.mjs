@@ -111,7 +111,7 @@ try {
   assert(session.status === "COMPLETED", "mock data session should be completed");
 
   const cashflow = await request(`/v1/rails/aa/sessions/${session.id}/cashflow`);
-  assertExactKeys(cashflow, ["rail", "inflow90d", "averageDailyBalance", "volatility", "consent", "source"], "Setu cashflow");
+  assertExactKeys(cashflow, ["rail", "inflow90d", "outflow90d", "netInflow90d", "observedDays", "reportedBalance", "dataQuality", "averageDailyBalance", "volatility", "consent", "source"], "Setu cashflow");
   assert(cashflow.rail === "AA", "cashflow rail mismatch");
   assert(cashflow.inflow90d === 480000, "cashflow must sum credit transactions");
   assert(cashflow.averageDailyBalance === 62000, "cashflow balance mismatch");

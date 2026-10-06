@@ -52,14 +52,30 @@ export function normalizeSetuCashflowAttestation(session) {
   }
 
   const accounts = collectAccounts(session.fips);
-  const transactions = accounts.flatMap((account) => collectTransactions(account.data ?? account.decryptedFI ?? account));
+  const rawTransactions = accounts.flatMap((account) => collectTransactions(account.data ?? account.decryptedFI ?? account));
+  const from = Date.parse(session.dataRange?.from);
+  const to = Date.parse(session.dataRange?.to);
+  const validRange = Number.isFinite(from) && Number.isFinite(to) && to > from;
+  const windowStart = validRange ? Math.max(from, to - 90 * 86400000) : null;
+  const timestamp = (transaction) => Date.parse(transaction.transactionTimestamp ?? transaction.valueDate ?? transaction.transactionDate);
+  const invalidDates = validRange ? rawTransactions.filter((t) => !Number.isFinite(timestamp(t)) || timestamp(t) < from || timestamp(t) > to).length : rawTransactions.length;
+  const invalidAmounts = rawTransactions.filter((t) => !Number.isFinite(Number(t.amount ?? t.transactionAmount ?? t.depositAmount)) || !["CREDIT", "CR", "DEPOSIT", "INFLOW", "DEBIT", "DR", "WITHDRAWAL", "OUTFLOW"].includes(String(t.transactionType ?? t.type ?? "").toUpperCase())).length;
+  // Preserve undated fixture compatibility, but mark it unsuitable for decisions.
+  const transactions = rawTransactions.filter((t) => !validRange || !Number.isFinite(timestamp(t)) || (timestamp(t) >= windowStart && timestamp(t) <= to));
   const credits = transactions.filter((transaction) => isCredit(transaction));
   const inflow90d = credits.reduce((sum, transaction) => sum + transactionAmount(transaction), 0);
+  const outflow90d = transactions.filter((t) => ["DEBIT", "DR", "WITHDRAWAL", "OUTFLOW"].includes(String(t.transactionType ?? t.type ?? "").toUpperCase())).reduce((sum, t) => sum + transactionAmount(t), 0);
   const balances = accounts.map(accountBalance).filter(Number.isFinite);
 
   return {
     rail: "AA",
     inflow90d,
+    outflow90d,
+    netInflow90d: Math.round((inflow90d - outflow90d) * 100) / 100,
+    observedDays: validRange ? Math.min(90, Math.ceil((to - from) / 86400000)) : null,
+    reportedBalance: balances.length ? Math.round(balances.reduce((sum, value) => sum + value, 0) * 100) / 100 : null,
+    dataQuality: { transactionCount: transactions.length, invalidDates, invalidAmounts,
+      decisionReady: session.status === "COMPLETED" && validRange && accounts.length > 0 && rawTransactions.length > 0 && invalidDates === 0 && invalidAmounts === 0 && accounts.every((a) => Boolean(a.data ?? a.decryptedFI) && (!(a.status ?? a.FIstatus) || ["READY", "DELIVERED"].includes(a.status ?? a.FIstatus))) },
     averageDailyBalance: balances.length ? balances.reduce((sum, value) => sum + value, 0) / balances.length : 0,
     volatility: calculateVolatility(transactions),
     consent: {

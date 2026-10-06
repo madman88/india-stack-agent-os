@@ -531,7 +531,7 @@ function serveAsset(request, url) {
 export default {
   async fetch(request, env = {}) {
     const url = new URL(request.url);
-    const sandboxResponse = await handleAaSandbox(request, env);
+    const sandboxResponse = await handleAaSandbox(request, env, scenario);
     if (sandboxResponse) return sandboxResponse;
     const apiResponse = await handleApi(request, url);
     if (apiResponse) return apiResponse;

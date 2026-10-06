@@ -473,6 +473,23 @@ components:
           type: number
         averageDailyBalance:
           type: number
+          deprecated: true
+          description: Legacy compatibility field; mean of reported balances, not a daily average.
+        outflow90d:
+          type: number
+        netInflow90d:
+          type: number
+        reportedBalance:
+          type: [number, "null"]
+        observedDays:
+          type: [integer, "null"]
+        dataQuality:
+          type: object
+          properties:
+            decisionReady:
+              type: boolean
+            transactionCount:
+              type: integer
         volatility:
           type: string
         consent:
@@ -655,6 +672,17 @@ components:
               type: integer
             requiredApproval:
               type: boolean
+            status:
+              type: string
+              enum: [review, hold]
+        mode:
+          type: string
+        calculation:
+          type: object
+        evidence:
+          type: object
+        provenance:
+          type: object
         loanOffers:
           type: array
           items:
