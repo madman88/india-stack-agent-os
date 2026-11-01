@@ -30,7 +30,8 @@
     "test:business-access": "node scripts/business-access-smoke.mjs",
     "db:generate": "drizzle-kit generate",
     "test:sites-worker": "node scripts/sites-worker-smoke.mjs",
-    "test": "npm run test:fixtures && npm run test:adapters && npm run test:aa-math && npm run test:integration && npm run test:rails-http && npm run test:setu-aa && npm run test:setu-security && npm run test:working-capital && npm run test:aa-lifecycle && npm run test:business-access && npm run test:components && npm run build && npm run test:sites-worker"
+    "test": "npm run test:fixtures && npm run test:adapters && npm run test:aa-math && npm run test:integration && npm run test:rails-http && npm run test:setu-aa && npm run test:setu-security && npm run test:working-capital && npm run test:aa-lifecycle && npm run test:business-access && npm run test:components && npm run build && npm run test:sites-worker && npm run test:sites-access",
+    "test:sites-access": "node scripts/sites-access-acceptance.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.953.0",

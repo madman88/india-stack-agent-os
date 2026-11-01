@@ -1,5 +1,8 @@
 # Provider Onboarding
 
+Owner/reviewer acceptance steps and evidence limits are in
+[Workspace access acceptance](workspace-access-acceptance.md).
+
 ## Setu sandbox pilot on Sites
 
 The hosted app can run one real Setu sandbox consent while public visitors retain
